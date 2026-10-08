@@ -1,0 +1,122 @@
+# -*- coding: utf-8 -*-
+"""WordSoft Web — محرر مستندات كامل في المتصفح (Flask) + REST مثل wordcraft MCP/CLI."""
+import os, sys, io
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from flask import Flask, request, send_file, jsonify, render_template_string
+from engine import WordDoc
+import formats
+
+app = Flask(__name__)
+
+PAGE = r"""<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WordSoft Web — معالج النصوص</title>
+<style>
+body{background:#1e1e1e;color:#e8e8e8;font-family:'Segoe UI',Tahoma,Arial;margin:0}
+header{background:#252526;padding:10px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #3e3e42}
+header b{color:#4da3ff;font-size:18px}
+button,select{background:#2d2d30;color:#e8e8e8;border:1px solid #3e3e42;border-radius:6px;padding:6px 10px;cursor:pointer}
+button:hover{background:#0e639c}
+main{display:flex;gap:0;min-height:calc(100vh - 110px)}
+nav{width:220px;background:#252526;padding:10px;border-left:1px solid #3e3e42}
+#ed{flex:1;background:#fff;color:#111;margin:14px;border-radius:8px;padding:34px;min-height:60vh;outline:none;line-height:1.9;max-width:900px}
+#ed h1{font-size:28px}#ed h2{font-size:20px;color:#2b579a}#ed blockquote{border-right:4px solid #0e639c;background:#f3f3f3;padding:8px 14px;margin:8px 0}
+footer{background:#252526;padding:8px 16px;color:#9a9a9a;font-size:13px;display:flex;gap:14px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:6px}
+</style></head><body>
+<header><b>WordSoft</b>
+<button onclick="cmd('bold')">B</button><button onclick="cmd('italic')">I</button><button onclick="cmd('underline')">U</button>
+<select onchange="cmd('formatBlock',this.value)"><option value="p">عادي</option><option value="h1">عنوان 1</option><option value="h2">عنوان 2</option><option value="blockquote">اقتباس</option></select>
+<button onclick="cmd('insertUnorderedList')">• قائمة</button><button onclick="cmd('insertOrderedList')">1. مرقمة</button>
+<button onclick="cmd('justifyCenter')">وسط</button><button onclick="cmd('justifyRight')">يمين</button>
+<button onclick="insTable()">▦ جدول</button>
+<button onclick="newDoc('sample')">📖 عينة</button><button onclick="newDoc('letter')">✉ رسالة</button>
+<button onclick="dl('docx')">⬇ DOCX</button><button onclick="dl('pdf')">⬇ PDF</button><button onclick="dl('html')">⬇ HTML</button>
+<label>⬆ فتح DOCX <input type=file id=up accept=.docx hidden onchange="upload(this)"></label>
+</header>
+<main><div style="flex:1;display:flex;justify-content:center"><div id="ed" contenteditable="true"><h1>دليل الاستوديو المفتوح — WordSoft</h1><p>مرحباً بك في <b>WordSoft</b> نسخة الويب — حدّد نصاً ونسّقه من الشريط، ثم صدّره DOCX أو PDF.</p><h2>الأنماط</h2><ul><li>عناوين وقوائم واقتباسات</li><li>جداول حقيقية</li><li>يعمل مع Word</li></ul></div></div>
+<nav><b>🧭 تنقل</b><div id="nav"></div><hr><b>📊 إحصاء</b><div id="st"></div></nav></main>
+<footer><span id="words">الكلمات: 0</span><span>WordSoft Web 1.0 — مستوحى من WordCraft</span></footer>
+<script>
+function cmd(c,v){document.execCommand(c,false,v||null);document.getElementById('ed').focus();upd()}
+function insTable(){let r=prompt('صفوف:',3),c=prompt('أعمدة:',3);if(!r||!c)return;let h='<table>';for(let i=0;i<r;i++){h+='<tr>';for(let j=0;j<c;j++)h+=`<td>${i==0?'عنوان '+(j+1):'...'}</td>`;h+='</tr>'}document.execCommand('insertHTML',false,h+'</table>');upd()}
+function upd(){let t=document.getElementById('ed').innerText;let w=(t.match(/\S+/g)||[]).length;document.getElementById('words').textContent='الكلمات: '+w+' | الصفحات ≈ '+Math.max(1,Math.round(w/400+.5));
+let nav=document.getElementById('nav');nav.innerHTML='';document.querySelectorAll('#ed h1,#ed h2').forEach(h=>{let a=document.createElement('div');a.textContent='• '+h.textContent.slice(0,40);a.style.cursor='pointer';a.onclick=()=>h.scrollIntoView();nav.appendChild(a)})}
+async function dl(f){let r=await fetch('/api/export/'+f,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({html:document.getElementById('ed').innerHTML})});let b=await r.blob();let a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='wordsoft.'+f;a.click()}
+async function newDoc(k){let r=await fetch('/api/template/'+k);let j=await r.json();document.getElementById('ed').innerHTML=j.html;upd()}
+async function upload(inp){let fd=new FormData();fd.append('file',inp.files[0]);let r=await fetch('/api/upload',{method:'POST',body:fd});let j=await r.json();document.getElementById('ed').innerHTML=j.html;upd()}
+document.getElementById('ed').addEventListener('input',upd);upd();setInterval(upd,2000);
+</script></body></html>"""
+
+def html_to_doc(h: str, title="مستند ويب") -> WordDoc:
+    import re, html as H
+    doc = WordDoc(title=title)
+    # جداول أولاً
+    tables = re.findall(r"<table.*?</table>", h, re.S | re.I)
+    text = re.sub(r"<table.*?</table>", "\n[[TABLE]]\n", h, flags=re.S | re.I)
+    parts = re.split(r"<h1>|<h2>|<blockquote>|<li>|<p>|</h1>|</h2>|</blockquote>|</li>|</p>|<br.*?>|\n", text)
+    ti = 0
+    for raw in parts:
+        t = re.sub(r"<.*?>", "", raw).strip()
+        t = H.unescape(t)
+        if not t: continue
+        if t == "[[TABLE]]" and ti < len(tables):
+            cells = re.findall(r"<t[dh].*?>(.*?)</t[dh]>", tables[ti], re.S | re.I)
+            import html as HH
+            cells = [HH.unescape(re.sub(r"<.*?>", "", c).strip()) for c in cells]
+            ncols = max(1, len(re.findall(r"<tr", tables[ti], re.I)) and len(cells) // max(1, len(re.findall(r"<tr", tables[ti], re.I))))
+            rows = [cells[i:i + ncols] for i in range(0, len(cells), ncols)] or [cells]
+            doc.blocks.append(__import__("engine").Table(rows=rows)); ti += 1
+            continue
+        if raw.strip().startswith("<li") or "<li" in raw:
+            doc.blocks.append(__import__("engine").Paragraph([__import__("engine").Run(t)], style="List Bullet"))
+        else:
+            doc.blocks.append(__import__("engine").Paragraph([__import__("engine").Run(t)]))
+    # عناوين تقريبية: أول سطر عنوان
+    if doc.blocks and isinstance(doc.blocks[0], __import__("engine").Paragraph):
+        doc.blocks[0].style = "Title"
+    return doc or WordDoc.blank()
+
+@app.route("/")
+def index(): return render_template_string(PAGE)
+
+@app.route("/api/template/<kind>")
+def tpl(kind):
+    import html as H
+    doc = WordDoc.template(kind if kind in ("sample", "letter", "report", "resume", "blank") else "sample")
+    h = ""
+    for b in doc.blocks:
+        if isinstance(b, __import__("engine").Table):
+            h += "<table>" + "".join("<tr>" + "".join(f"<td>{H.escape(c)}</td>" for c in row) + "</tr>" for row in b.rows) + "</table>"
+        else:
+            t = H.escape(b.text())
+            h += {"Title": f"<h1>{t}</h1>", "Heading 1": f"<h2>{t}</h2>"}.get(b.style, f"<p>{t}</p>")
+    return jsonify({"html": h})
+
+@app.route("/api/upload", methods=["POST"])
+def upload():
+    import html as H
+    f = request.files["file"]
+    p = "/tmp/_ws_up.docx"; f.save(p)
+    doc = formats.load(p)
+    h = ""
+    for b in doc.blocks:
+        if isinstance(b, __import__("engine").Table):
+            h += "<table>" + "".join("<tr>" + "".join(f"<td>{H.escape(c)}</td>" for c in row) + "</tr>" for row in b.rows) + "</table>"
+        else:
+            h += f"<p>{H.escape(b.text())}</p>"
+    return jsonify({"html": h})
+
+@app.route("/api/export/<fmt>", methods=["POST"])
+def export(fmt):
+    doc = html_to_doc(request.json.get("html", ""), "WordSoft")
+    import tempfile
+    suf = {"docx": ".docx", "pdf": ".pdf", "html": ".html", "md": ".md", "txt": ".txt"}.get(fmt, ".docx")
+    fd, path = tempfile.mkstemp(suffix=suf); os.close(fd)
+    formats.save(doc, path)
+    mime = {"docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "pdf": "application/pdf", "html": "text/html", "md": "text/markdown", "txt": "text/plain"}.get(fmt)
+    return send_file(path, as_attachment=True, download_name=f"wordsoft{suf}", mimetype=mime)
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5000, debug=True)

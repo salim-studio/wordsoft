@@ -1,0 +1,6 @@
+python-docx>=1.1
+reportlab>=4
+pillow>=10
+flask>=3
+arabic-reshaper>=3
+python-bidi>=0.4

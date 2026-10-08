@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+sample.docx
+sample.pdf
+sample.html
+sample.md
+/tmp/
