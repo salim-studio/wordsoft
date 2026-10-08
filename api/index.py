@@ -237,7 +237,7 @@ function bsShow(x){const b=$('bsBody');
 if(x==='New')b.innerHTML='<h2>New document</h2>'+[['Blank','blank'],['Cover page','cover'],['Open Studio Handbook (sample)','sample'],['Formal letter','letter'],['Report','report'],['Resume','resume'],['Envelope','envelope'],['Labels','label']].map(([t,k])=>`<button class="tpl" onclick="newDoc('${k}');closeBS()">${t}</button>`).join('');
 else if(x==='Open')b.innerHTML='<h2>Open</h2><button class="tpl" onclick="$(\'upDocx\').click()">Browse for DOCX...</button>';
 else if(x==='Info'){const t=ed().innerText;b.innerHTML=`<h2>Info</h2><p>Title: ${STATE.title}</p><p>Words: ${words()} — Pages ~ ${pages()}</p><p>Theme: ${STATE.theme} — ${STATE.setup.size} ${STATE.setup.orientation}</p><p>Copyright (c) 2026 salim-slimani — MIT License</p>`}
-else if(x==='Export')b.innerHTML='<h2>Export</h2>'+['docx','pdf','html','md','txt'].map(f=>`<button class="tpl" onclick="dl('${f}')">Download .${f.toUpperCase()}</button>`).join('');
+else if(x==='Export')b.innerHTML='<h2>Export</h2>'+['docx','pdf','epub','html','md','txt'].map(f=>`<button class="tpl" onclick="dl('${f}')">Download .${f.toUpperCase()}</button>`).join('');
 else if(x==='Print')b.innerHTML='<h2>Print</h2><button class="tpl" onclick="doPrint()">Print...</button><button class="tpl" onclick="dl(\'pdf\')">Print preview (PDF)...</button>';
 else closeBS()}
 async function newDoc(k){const r=await fetch('/api/template/'+k);const j=await r.json();ed().innerHTML=j.html;STATE.title=k;upd()}
@@ -447,7 +447,7 @@ def export(fmt):
                       data.get("watermark", ""), data.get("theme", "Office"),
                       data.get("footnotes", []))
     import tempfile
-    suf = {"docx": ".docx", "pdf": ".pdf", "html": ".html", "md": ".md", "txt": ".txt"}.get(fmt, ".docx")
+    suf = {"docx": ".docx", "pdf": ".pdf", "epub": ".epub", "html": ".html", "md": ".md", "txt": ".txt"}.get(fmt, ".docx")
     fd, path = tempfile.mkstemp(suffix=suf)
     os.close(fd)
     if fmt == "docx" and getattr(doc, "_web_images", None):
@@ -456,7 +456,7 @@ def export(fmt):
     else:
         formats.save(doc, path)
     mime = {"docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "pdf": "application/pdf", "html": "text/html",
+            "pdf": "application/pdf", "epub": "application/epub+zip", "html": "text/html",
             "md": "text/markdown", "txt": "text/plain"}.get(fmt)
     return send_file(path, as_attachment=True, download_name=f"wordsoft{suf}", mimetype=mime)
 

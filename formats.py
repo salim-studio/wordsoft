@@ -402,11 +402,76 @@ def save_pdf(doc: WordDoc, path: str):
                       title=doc.title, author=doc.author,
                       subject=doc.subject, keywords=doc.keywords).build(story, onFirstPage=frame, onLaterPages=frame)
 
+# ---------------- EPUB ----------------
+def save_epub(doc: WordDoc, path: str):
+    """Minimal valid EPUB 2 ebook: readable in Apple Books, Kindle, Calibre."""
+    import zipfile
+    import html as H
+    body = [f"<h1>{ihtml.escape(doc.title)}</h1>"]
+    for b in doc.blocks:
+        if isinstance(b, PageBreak):
+            body.append('<p style="page-break-before:always"></p>')
+        elif isinstance(b, TOCField):
+            body.append(f"<h2>{ihtml.escape(b.title)}</h2><ul>")
+            for _, text, page in doc.build_toc(b.levels):
+                body.append(f"<li>{ihtml.escape(text)}</li>")
+            body.append("</ul>")
+        elif isinstance(b, Table):
+            if getattr(b, "caption", None): body.append(f"<p><i>{ihtml.escape(b.caption)}</i></p>")
+            body.append("<table border='1' cellpadding='4' cellspacing='0'>")
+            for i, row in enumerate(b.rows):
+                tag = "th" if (b.header and i == 0) else "td"
+                body.append("<tr>" + "".join(f"<{tag}>{ihtml.escape(c)}</{tag}>" for c in row) + "</tr>")
+            body.append("</table>")
+        else:
+            t = "".join(f"<b>{ihtml.escape(r.text)}</b>" if r.bold else
+                        (f"<i>{ihtml.escape(r.text)}</i>" if r.italic else ihtml.escape(r.text))
+                        for r in b.runs if isinstance(r, Run))
+            t += "".join(f"<sup>[{r.nid}]</sup>" for r in b.runs if isinstance(r, FootnoteRef))
+            tag = {"Title": "h1", "Heading 1": "h2", "Heading 2": "h3",
+                   "Heading 3": "h4"}.get(b.style, "p")
+            if b.style == "Quote":
+                body.append(f"<blockquote>{t}</blockquote>")
+            elif b.style == "List Bullet":
+                body.append(f"<ul><li>{t}</li></ul>")
+            elif b.style == "List Number":
+                body.append(f"<ol><li>{t}</li></ol>")
+            else:
+                body.append(f"<{tag}>{t}</{tag}>")
+    if doc.footnotes:
+        body.append("<h2>Footnotes</h2><ol>")
+        body += [f"<li>[{fn.nid}] {ihtml.escape(fn.text)}</li>" for fn in doc.footnotes]
+        body.append("</ol>")
+    xhtml = ("<?xml version='1.0' encoding='utf-8'?>\n<html xmlns='http://www.w3.org/1999/xhtml'>"
+             f"<head><title>{H.escape(doc.title)}</title></head><body>\n" + "\n".join(body) + "\n</body></html>")
+    opf = (f"<?xml version='1.0' encoding='utf-8'?>\n<package version='2.0' "
+           "xmlns='http://www.idpf.org/2007/opf' unique-identifier='bid'>"
+           "<metadata xmlns:dc='http://purl.org/dc/elements/1.1/'>"
+           f"<dc:title>{H.escape(doc.title)}</dc:title><dc:creator>{H.escape(doc.author)}</dc:creator>"
+           "<dc:language>en</dc:language><dc:identifier id='bid'>wordsoft-2026</dc:identifier></metadata>"
+           "<manifest><item id='ch' href='chap1.xhtml' media-type='application/xhtml+xml'/>"
+           "<item id='ncx' href='toc.ncx' media-type='application/x-dtbncx+xml'/></manifest>"
+           "<spine toc='ncx'><itemref idref='ch'/></spine></package>")
+    ncx = ("<?xml version='1.0' encoding='utf-8'?>\n<ncx xmlns='http://www.daisy.org/z3986/2005/ncx/' version='2005-1'>"
+           f"<head><meta name='dtb:uid' content='wordsoft-2026'/></head><docTitle><text>{H.escape(doc.title)}</text></docTitle>"
+           "<navMap><navPoint id='n1' playOrder='1'><navLabel><text>Start</text></navLabel>"
+           "<content src='chap1.xhtml'/></navPoint></navMap></ncx>")
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("mimetype", "application/epub+zip", compress_type=zipfile.ZIP_STORED)
+        z.writestr("META-INF/container.xml",
+                   "<?xml version='1.0'?><container version='1.0' xmlns='urn:oasis:names:tc:opendocument:xmlns:container'>"
+                   "<rootfiles><rootfile full-path='OEBPS/content.opf' media-type='application/oebps-package+xml'/></rootfiles></container>")
+        z.writestr("OEBPS/chap1.xhtml", xhtml)
+        z.writestr("OEBPS/content.opf", opf)
+        z.writestr("OEBPS/toc.ncx", ncx)
+
+
 # ---------------- dispatcher ----------------
 def save(doc: WordDoc, path: str):
     p = path.lower()
     if p.endswith(".docx"): return save_docx(doc, path)
     if p.endswith(".pdf"): return save_pdf(doc, path)
+    if p.endswith(".epub"): return save_epub(doc, path)
     if p.endswith(".html") or p.endswith(".htm"): return save_html(doc, path)
     if p.endswith(".md"): return save_md(doc, path)
     return save_txt(doc, path)

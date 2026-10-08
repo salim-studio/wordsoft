@@ -41,6 +41,11 @@ python api/index.py       :: web version at http://127.0.0.1:5000
 | Area | Highlights |
 |---|---|
 | **File backstage** | New (6 templates), Open + recent, Info/properties, Save As, Export, Print + preview |
+| **macOS studio** | Icon toolbar with tooltips, document gallery on launch, Preferences, session restore, fullscreen, light aqua theme |
+| **Insert+** | Charts (bar/line/pie via matplotlib), WordArt banners, screenshots, Quick Parts AutoText, `=lorem()` generator |
+| **Review+** | Editor score (passive voice, weasel words, readability, grade level), writing goal with progress bar, typewriter mode, tracked-changes pane, AutoCorrect manager |
+| **References+** | BibTeX `.bib` import, EPUB ebook export (Apple Books/Kindle-ready) |
+| **Safety** | AutoRecover snapshots + Versions browser |
 | **Home** | Cut/copy/paste, format painter, fonts, grow/shrink, B/I/U/strike/super/sub, change case, colors, highlight, clear, bullets, numbering, indents, alignment, line spacing, shading, borders, sort A→Z, style gallery + manager + custom styles, find/replace/regex, go to |
 | **Insert** | Cover page, blank page, breaks, tables (insert + cell editor), pictures, shapes, text boxes, headers/footers, live page numbers, date/time, fields, drop caps, symbols, equations, comments |
 | **Draw** | Pen/marker/eraser, ink overlay, keep drawing as picture |

@@ -165,6 +165,21 @@ def _merge(doc: WordDoc, csv: str = "", out: str = "merged.docx") -> WordDoc:
     return merged
 
 
+@command("file.epub", "Export EPUB ebook", "File")
+def _epub(doc: WordDoc, path: str = "document.epub") -> WordDoc:
+    import formats
+    formats.save_epub(doc, path)
+    return doc
+
+
+@command("tools.editor", "Writing score + readability", "Review")
+def _editor(doc: WordDoc) -> dict:
+    import extras
+    text = doc.full_text()
+    score, findings = extras.editor_check(text)
+    return {"score": score, "findings": findings, **extras.readability(text)}
+
+
 # ---------------- macros ----------------
 class Macro:
     def __init__(self, name: str):

@@ -4,3 +4,5 @@ pillow>=10
 flask>=3
 arabic-reshaper>=3
 python-bidi>=0.4
+# optional — desktop charts (Insert > Chart):
+# matplotlib>=3.8

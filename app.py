@@ -16,17 +16,19 @@ from tkinter import ttk, filedialog, messagebox, simpledialog, colorchooser
 from engine import WordDoc, Paragraph, Run, Table, PageBreak, TOCField, FootnoteRef, Footnote, Comment, THEMES
 import formats
 import dialogs
+import extras
 from commands import COMMANDS, execute, Macro
 
-BRAND = {"name": "WordSoft", "tagline": "Write beautifully.", "blue": "#2563EB", "version": "2.1.0"}
+BRAND = {"name": "WordSoft", "tagline": "Write beautifully.", "blue": "#2563EB", "version": "2.2.0"}
 SETTINGS_PATH = os.path.join(os.path.expanduser("~"), ".wordsoft.json")
 
 DARK = {"bg": "#161a23", "panel": "#1f2530", "panel2": "#2a3242", "doc": "#10141b",
         "page": "#232b3a", "fg": "#e8eaf0", "muted": "#8b94a7", "accent": "#2563EB", "border": "#39435a"}
-LIGHT = {"bg": "#eef1f6", "panel": "#ffffff", "panel2": "#e8edf5", "doc": "#dde3ee",
-         "page": "#ffffff", "fg": "#1a2233", "muted": "#5b6478", "accent": "#2563EB", "border": "#cdd6e4"}
+# macOS light: airy panels, hairline borders, system blue accent
+LIGHT = {"bg": "#E9EAEE", "panel": "#F5F5F7", "panel2": "#FFFFFF", "doc": "#D8D8DE",
+         "page": "#ffffff", "fg": "#1C1C1E", "muted": "#6E6E73", "accent": "#0A84FF", "border": "#D1D1D6"}
 
-FONTS = ["Calibri", "Calibri Light", "Arial", "Segoe UI", "Times New Roman", "Georgia",
+FONTS = ["SF Pro Text", "Calibri", "Calibri Light", "Arial", "Segoe UI", "Times New Roman", "Georgia",
          "Courier New", "Verdana", "Tahoma", "Traditional Arabic", "Amiri"]
 SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 48, 72]
 STYLES = ["Normal", "No Spacing", "Title", "Subtitle", "Heading 1", "Heading 2", "Heading 3",
@@ -34,6 +36,7 @@ STYLES = ["Normal", "No Spacing", "Title", "Subtitle", "Heading 1", "Heading 2",
 OPEN_TYPES = [("Word / Text", "*.docx *.txt *.md"), ("Word", "*.docx"), ("Text", "*.txt *.md"), ("All", "*.*")]
 SAVE_DOCX = [("Word Document", "*.docx")]
 AUTOCORRECT = {"(c)": "©", "(r)": "®", "(tm)": "™", "...": "…", "--": "–", "teh": "the", "adn": "and"}
+_BUILTIN_AC = set(AUTOCORRECT)
 THESAURUS = {"fast": ["quick", "rapid", "swift"], "good": ["fine", "great", "excellent"],
     "big": ["large", "huge", "vast"], "small": ["little", "tiny", "compact"],
     "happy": ["glad", "pleased", "delighted"], "important": ["key", "crucial", "vital"],
@@ -78,12 +81,27 @@ class WordSoftApp:
         self._body()
         self._statusbar()
         self._backstage()
+        AUTOCORRECT.update(self.settings.get("autocorrect", {}))
+        self.goal = int(self.settings.get("goal", 0))
+        self.typewriter = False
+        self._dirty = False
+        self.versions_dir = os.path.join(os.path.expanduser("~"), ".wordsoft", "versions")
+        try: os.makedirs(self.versions_dir, exist_ok=True)
+        except Exception: pass
         self._config_tags()
         self._apply_margins()
         self.load_doc(self.doc)
         self._bind_keys()
         if path and os.path.exists(path):
             self.open_path(path)
+        elif self.settings.get("restore") and self.settings.get("recent"):
+            for p in self.settings["recent"]:
+                if p and os.path.exists(p):
+                    self.open_path(p)
+                    break
+        self._autosave_tick()
+        if self.settings.get("gallery", True) and not path:
+            self.root.after(300, self.show_gallery)
 
     # ================= settings =================
     def _load_settings(self) -> dict:
@@ -142,6 +160,7 @@ class WordSoftApp:
             w.configure(bg=t["page"], fg=t["fg"], insertbackground=t["fg"], selectbackground=t["accent"])
         self.nav_lb.configure(bg=t["panel2"], fg=t["fg"])
         self.cmt_lb.configure(bg=t["panel2"], fg=t["fg"])
+        self.chg_lb.configure(bg=t["panel2"], fg=t["fg"])
         self.canvas_bg.configure(bg=t["doc"])
         self._save_settings()
 
@@ -149,10 +168,13 @@ class WordSoftApp:
         qa = ttk.Frame(self.root); qa.pack(side="top", fill="x")
         tk.Label(qa, text=" W ", font=("Segoe UI", 11, "bold"), bg=BRAND["blue"], fg="white").pack(side="left", padx=(6, 2), pady=3)
         tk.Label(qa, text=f"{BRAND['name']}", font=("Segoe UI", 11, "bold")).pack(side="left")
-        for tip, fn in [("New (Ctrl+N)", self.file_new), ("Open (Ctrl+O)", self.file_open),
-                        ("Save (Ctrl+S)", self.file_save), ("Undo", self.undo), ("Redo", self.redo),
-                        ("Print (Ctrl+P)", self.print_dialog)]:
-            ttk.Button(qa, text=tip.split(" ")[0], width=6, command=fn).pack(side="left", padx=1)
+        for icon, tip, fn in [("＋", "New (Ctrl+N)", self.file_new), ("📂", "Open (Ctrl+O)", self.file_open),
+                               ("💾", "Save (Ctrl+S)", self.file_save), ("↩", "Undo", self.undo),
+                               ("↪", "Redo", self.redo), ("🖨", "Print (Ctrl+P)", self.print_dialog),
+                               ("⚙", "Preferences", self.preferences), ("?", "About", self.about)]:
+            b = ttk.Button(qa, text=icon, width=3, command=fn)
+            b.pack(side="left", padx=1)
+            self._tip(b, tip)
         ttk.Label(qa, text=BRAND["tagline"], font=("Segoe UI", 9, "italic")).pack(side="left", padx=10)
 
     # ================= ribbon =================
@@ -236,6 +258,9 @@ class WordSoftApp:
         ttk.Button(g, text="Edit", width=6, command=self.edit_table).pack(side="left", padx=1)
         g = self._grp(f, "Illustrations")
         ttk.Button(g, text="Picture", width=8, command=self.insert_image).pack(side="left", padx=1)
+        ttk.Button(g, text="Shot", width=6, command=self.insert_screenshot).pack(side="left", padx=1)
+        ttk.Button(g, text="Chart", width=7, command=self.insert_chart).pack(side="left", padx=1)
+        ttk.Button(g, text="WordArt", width=8, command=self.insert_wordart).pack(side="left", padx=1)
         ttk.Button(g, text="Shape", width=7, command=self.insert_shape).pack(side="left", padx=1)
         ttk.Button(g, text="Text Box", width=8, command=self.insert_textbox).pack(side="left", padx=1)
         g = self._grp(f, "Header & Footer")
@@ -248,6 +273,7 @@ class WordSoftApp:
         ttk.Button(g, text="Drop Cap", width=8, command=self.drop_cap).pack(side="left", padx=1)
         ttk.Button(g, text="Symbol", width=7, command=self.symbols).pack(side="left", padx=1)
         ttk.Button(g, text="Equation", width=8, command=self.insert_equation).pack(side="left", padx=1)
+        ttk.Button(g, text="Quick Parts", width=10, command=self.quick_parts).pack(side="left", padx=1)
         g = self._grp(f, "Comments")
         ttk.Button(g, text="Comment", width=8, command=self.add_comment).pack(side="left", padx=1)
 
@@ -301,6 +327,7 @@ class WordSoftApp:
         ttk.Button(g, text="Show notes", width=10, command=self.show_footnotes).pack(side="left", padx=1)
         g = self._grp(f, "Citations")
         ttk.Button(g, text="Sources", width=8, command=self.citation_manager).pack(side="left", padx=1)
+        ttk.Button(g, text=".bib", width=5, command=self.import_bibtex).pack(side="left", padx=1)
         ttk.Button(g, text="Caption", width=8, command=self.insert_caption).pack(side="left", padx=1)
         ttk.Button(g, text="X-ref", width=6, command=self.cross_ref).pack(side="left", padx=1)
         g = self._grp(f, "Index")
@@ -324,6 +351,9 @@ class WordSoftApp:
         ttk.Button(g, text="Spelling F7", width=11, command=self.spell_dialog).pack(side="left", padx=1)
         ttk.Button(g, text="Thesaurus", width=9, command=self.thesaurus).pack(side="left", padx=1)
         ttk.Button(g, text="Word count", width=10, command=self.wordcount_dialog).pack(side="left", padx=1)
+        ttk.Button(g, text="Editor ★", width=9, command=self.editor_pane).pack(side="left", padx=1)
+        ttk.Button(g, text="Goal", width=6, command=self.set_goal).pack(side="left", padx=1)
+        ttk.Button(g, text="AutoCap", width=8, command=self.autocorrect_mgr).pack(side="left", padx=1)
         ttk.Button(g, text="Language", width=9, command=self.set_language).pack(side="left", padx=1)
         g = self._grp(f, "Comments")
         ttk.Button(g, text="New", width=6, command=self.add_comment).pack(side="left", padx=1)
@@ -349,6 +379,8 @@ class WordSoftApp:
         ttk.Button(g, text="Ruler", width=7, command=self.toggle_ruler).pack(side="left", padx=1)
         ttk.Button(g, text="¶ Marks", width=7, command=self.toggle_marks).pack(side="left", padx=1)
         ttk.Button(g, text="Nav pane", width=8, command=self.toggle_nav).pack(side="left", padx=1)
+        ttk.Button(g, text="Typewriter", width=10, command=self.toggle_typewriter).pack(side="left", padx=1)
+        ttk.Button(g, text="Full scr", width=8, command=self.toggle_fullscreen).pack(side="left", padx=1)
         g = self._grp(f, "Zoom")
         for z in ["100%", "Page width", "150%"]:
             ttk.Button(g, text=z, width=9, command=lambda zz=z: self.zoom_preset(zz)).pack(side="left", padx=1)
@@ -449,11 +481,15 @@ class WordSoftApp:
         # --- comments pane
         self.cmt_frame = ttk.Frame(self.mid, width=260)
         ttk.Label(self.cmt_frame, text=" Comments ").pack()
-        self.cmt_lb = tk.Listbox(self.cmt_frame, bg=self.theme["panel2"], fg=self.theme["fg"], relief="flat")
+        self.cmt_lb = tk.Listbox(self.cmt_frame, bg=self.theme["panel2"], fg=self.theme["fg"], relief="flat", height=12)
         self.cmt_lb.pack(fill="both", expand=True, padx=4)
+        ttk.Label(self.cmt_frame, text=" Tracked changes ").pack()
+        self.chg_lb = tk.Listbox(self.cmt_frame, bg=self.theme["panel2"], fg=self.theme["fg"], relief="flat", height=8)
+        self.chg_lb.pack(fill="both", expand=True, padx=4)
         brow = ttk.Frame(self.cmt_frame); brow.pack(fill="x")
         ttk.Button(brow, text="Resolve", command=self.resolve_comment).pack(side="left", padx=2)
         ttk.Button(brow, text="Delete", command=self.delete_comment).pack(side="left", padx=2)
+        ttk.Button(brow, text="Accept all", command=self.accept_all).pack(side="left", padx=2)
 
     def _on_scroll(self, *args):
         self.gutter.yview_moveto(args[0] if len(args) == 1 else args[1])
@@ -481,6 +517,7 @@ class WordSoftApp:
         self.lang_btn = ttk.Button(sb, text=self.settings.get("lang", "en-US"), width=8, command=self.set_language)
         self.lang_btn.pack(side="left", padx=4)
         self.track_lbl = ttk.Label(sb, text="Track: off"); self.track_lbl.pack(side="left", padx=8)
+        self.goal_lbl = ttk.Label(sb, text=""); self.goal_lbl.pack(side="left", padx=8)
         self.zoom_lbl = ttk.Label(sb, text="100%"); self.zoom_lbl.pack(side="right", padx=4)
         self.zoom_scale = ttk.Scale(sb, from_=50, to=200, value=100, length=130,
                                     command=lambda v: self.set_zoom(float(v) / 100))
@@ -601,7 +638,7 @@ class WordSoftApp:
         if self.doc.protection:
             self.text.configure(state="disabled")
         self.root.title(f"{BRAND['name']} — {doc.title}")
-        self.refresh_nav(); self.refresh_comments(); self.update_status(); self._draw_ruler()
+        self.refresh_nav(); self.refresh_comments(); self.refresh_changes(); self.update_status(); self._draw_ruler()
 
     def _line_tags(self, line: int) -> set:
         try: return set(self.text.tag_names(f"{line}.0"))
@@ -744,16 +781,20 @@ class WordSoftApp:
                          ("Tracking", "on" if self.track.get() else "off"),
                          ("Protection", "locked" if self.doc.protection else "none")]:
                 tk.Label(b, text=f"{k}: {v}", bg=self.theme["panel"], fg=self.theme["fg"]).pack(anchor="w", padx=20)
-            ttk.Button(b, text="Document inspector...", command=self.inspect_dialog).pack(pady=8)
+            ttk.Button(b, text="Document inspector...", command=self.inspect_dialog).pack(pady=4)
+            ttk.Button(b, text="Versions / AutoRecover...", command=self.versions_browser).pack(pady=2)
+            ttk.Button(b, text="Preferences...", command=self.preferences).pack(pady=2)
         elif item == "Save As":
             tk.Label(b, text="Save a copy", font=("Segoe UI", 16, "bold"), bg=self.theme["panel"], fg=self.theme["fg"]).pack(pady=8)
             ttk.Button(b, text="Word (*.docx)", width=30, command=lambda: (self.file_saveas(), self.hide_backstage())).pack(pady=2)
-            for label, fn in [("PDF", self.export_pdf), ("HTML", self.export_html),
+            for label, fn in [("PDF", self.export_pdf), ("EPUB ebook", self.export_epub),
+                              ("HTML", self.export_html),
                               ("Markdown", self.export_md), ("Plain text", self.export_txt)]:
                 ttk.Button(b, text=label, width=30, command=lambda f=fn: (f(), self.hide_backstage())).pack(pady=2)
         elif item == "Export":
             tk.Label(b, text="Export", font=("Segoe UI", 16, "bold"), bg=self.theme["panel"], fg=self.theme["fg"]).pack(pady=8)
-            for label, fn in [("Export PDF", self.export_pdf), ("Export HTML", self.export_html),
+            for label, fn in [("Export PDF", self.export_pdf), ("Export EPUB", self.export_epub),
+                              ("Export HTML", self.export_html),
                               ("Export Markdown", self.export_md), ("Export TXT", self.export_txt)]:
                 ttk.Button(b, text=label, width=30, command=fn).pack(pady=2)
         elif item == "Print":
@@ -803,6 +844,7 @@ class WordSoftApp:
         except Exception as ex: messagebox.showerror("Error", str(ex))
 
     def export_pdf(self): self._export(".pdf", ("PDF", "*.pdf"), formats.save_pdf)
+    def export_epub(self): self._export(".epub", ("EPUB ebook", "*.epub"), formats.save_epub)
     def export_html(self): self._export(".html", ("HTML", "*.html"), formats.save_html)
     def export_md(self): self._export(".md", ("Markdown", "*.md"), formats.save_md)
     def export_txt(self): self._export(".txt", ("Text", "*.txt"), formats.save_txt)
@@ -1637,6 +1679,219 @@ class WordSoftApp:
             self.load_doc(self.macros[name].play(self.text_to_doc()))
             self.update_status(f"Macro played: {name}")
 
+    # ================= mac studio: gallery, prefs, versions, goals, extras =================
+    def _tip(self, widget, text):
+        tip = [None]
+
+        def show(_e=None):
+            x, y = widget.winfo_pointerx() + 12, widget.winfo_pointery() + 12
+            t = tk.Toplevel(self.root); t.wm_overrideredirect(True); t.wm_geometry(f"+{x}+{y}")
+            tk.Label(t, text=text, bg="#1C1C1E" if self.dark_mode else "#FFF8DC",
+                     fg="white" if self.dark_mode else "black", padx=6, pady=3,
+                     font=("Segoe UI", 9)).pack()
+            tip[0] = t
+
+        def hide(_e=None):
+            if tip[0]:
+                try: tip[0].destroy()
+                except Exception: pass
+                tip[0] = None
+
+        widget.bind("<Enter>", show); widget.bind("<Leave>", hide)
+
+    def show_gallery(self):
+        win = tk.Toplevel(self.root); win.title(f"{BRAND['name']} — Document gallery")
+        win.geometry("720x480"); win.transient(self.root)
+        left = tk.Frame(win, bg=self.theme["panel2"], width=200)
+        left.pack(side="left", fill="y"); left.pack_propagate(False)
+        tk.Label(left, text=f"{BRAND['name']}\n{BRAND['tagline']}", bg=self.theme["panel2"],
+                 fg=self.theme["fg"], font=("Segoe UI", 11, "bold"), pady=12).pack()
+        tk.Label(left, text="Recent", bg=self.theme["panel2"], fg=self.theme["muted"]).pack()
+        rlb = tk.Listbox(left, bg=self.theme["panel2"], fg=self.theme["fg"], relief="flat")
+        rlb.pack(fill="both", expand=True, padx=6)
+        for p in self.settings.get("recent", [])[:10]:
+            rlb.insert("end", os.path.basename(p))
+        right = tk.Frame(win, bg=self.theme["panel"]); right.pack(side="left", fill="both", expand=True)
+        tk.Label(right, text="Create new", bg=self.theme["panel"], fg=self.theme["fg"],
+                 font=("Segoe UI", 14, "bold")).pack(pady=10)
+        grid = tk.Frame(right, bg=self.theme["panel"]); grid.pack()
+        templates = [("Blank", "blank"), ("Cover", "cover"), ("Sample book", "sample"),
+                     ("Letter", "letter"), ("Report", "report"), ("Resume", "resume")]
+        def pick(kind):
+            self.load_doc(WordDoc.template(kind)); self.current_path = None; win.destroy()
+
+        for i, (label, kind) in enumerate(templates):
+            b = tk.Button(grid, text=f"▦\n{label}", width=14, height=4, font=("Segoe UI", 10),
+                          bg=self.theme["panel2"], fg=self.theme["fg"], relief="flat",
+                          command=lambda k=kind: pick(k))
+            b.grid(row=i // 3, column=i % 3, padx=8, pady=8)
+
+        def open_recent(_e=None):
+            if rlb.curselection():
+                self.open_path(self.settings["recent"][rlb.curselection()[0]]); win.destroy()
+
+        rlb.bind("<Double-Button-1>", open_recent)
+
+    def preferences(self):
+        win = tk.Toplevel(self.root); win.title("Preferences"); win.geometry("400x420")
+        win.transient(self.root); win.grab_set()
+        user = tk.StringVar(value=self.doc.author)
+        lang = tk.StringVar(value=self.settings.get("lang", "en-US"))
+        mins = tk.IntVar(value=self.settings.get("autosave_min", 5))
+        auto = tk.BooleanVar(value=self.settings.get("autosave", True))
+        gal = tk.BooleanVar(value=self.settings.get("gallery", True))
+        restore = tk.BooleanVar(value=self.settings.get("restore", False))
+        goal = tk.IntVar(value=self.goal)
+        for label, var, w in [("Your name:", user, 30), ("Language:", lang, 12)]:
+            ttk.Label(win, text=label).pack(pady=(8, 0)); ttk.Entry(win, textvariable=var, width=w).pack()
+        ttk.Label(win, text="AutoRecover every (minutes):").pack(pady=(8, 0))
+        ttk.Spinbox(win, from_=1, to=60, textvariable=mins, width=8).pack()
+        ttk.Checkbutton(win, text="AutoRecover", variable=auto).pack()
+        ttk.Checkbutton(win, text="Show gallery on launch", variable=gal).pack()
+        ttk.Checkbutton(win, text="Restore last session", variable=restore).pack()
+        ttk.Label(win, text="Writing goal (words, 0 = off):").pack(pady=(8, 0))
+        ttk.Entry(win, textvariable=goal, width=10).pack()
+
+        def ok():
+            self.doc.author = user.get()
+            self.settings.update(lang=lang.get(), autosave_min=mins.get(), autosave=auto.get(),
+                                 gallery=gal.get(), restore=restore.get(), goal=goal.get(), user=user.get())
+            self.goal = goal.get()
+            self._save_settings(); win.destroy(); self.update_status("Preferences saved")
+
+        ttk.Button(win, text="OK", command=ok).pack(pady=12)
+
+    def _autosave_tick(self):
+        try:
+            if self.settings.get("autosave", True) and self._dirty:
+                stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+                name = re.sub(r"[^\w\- ]+", "", self.doc.title or "document").strip()[:40] or "document"
+                formats.save_docx(self.text_to_doc(), os.path.join(self.versions_dir, f"{name} {stamp}.docx"))
+                self._dirty = False
+        except Exception:
+            pass
+        self.root.after(max(1, int(self.settings.get("autosave_min", 5))) * 60000, self._autosave_tick)
+
+    def versions_browser(self):
+        win = tk.Toplevel(self.root); win.title("Versions / AutoRecover"); win.geometry("480x380")
+        win.transient(self.root)
+        lb = tk.Listbox(win); lb.pack(fill="both", expand=True, padx=8, pady=6)
+        files = sorted((os.path.join(self.versions_dir, f) for f in os.listdir(self.versions_dir)
+                                      if f.endswith(".docx")), reverse=True) if os.path.isdir(self.versions_dir) else []
+        for f in files:
+            lb.insert("end", f"{os.path.basename(f)}  ({os.path.getsize(f) // 1024} KB)")
+
+        def restore():
+            if lb.curselection():
+                self.open_path(files[lb.curselection()[0]]); win.destroy()
+
+        brow = ttk.Frame(win); brow.pack(pady=4)
+        ttk.Button(brow, text="Restore", command=restore).pack(side="left", padx=4)
+        ttk.Button(brow, text="Close", command=win.destroy).pack(side="left", padx=4)
+
+    # ---- writer pro tools ----
+    def set_goal(self):
+        v = simpledialog.askinteger("Writing goal", "Target words (0 = off):",
+                                    initialvalue=self.goal, minvalue=0, parent=self.root)
+        if v is not None:
+            self.goal = v; self.settings["goal"] = v; self._save_settings(); self.update_status()
+
+    def editor_pane(self):
+        extras.editor_dialog(self.root, self.text.get("1.0", "end-1c").replace("¶", ""))
+
+    def autocorrect_mgr(self):
+        extras.autocorrect_manager(self.root, AUTOCORRECT)
+        self.settings["autocorrect"] = {k: v for k, v in AUTOCORRECT.items() if k not in _BUILTIN_AC}
+        self._save_settings()
+
+    def import_bibtex(self):
+        doc = self.text_to_doc()
+        if extras.import_bibtex_dialog(self.root, doc):
+            self.doc.citations = doc.citations
+            self.update_status(f"{len(doc.citations)} sources")
+
+    def quick_parts(self):
+        parts = self.settings.setdefault("autotext", {"Signature": "Best regards,\n" + self.doc.author,
+                                                      "Address block": "Name\nStreet\nCity"})
+        win = tk.Toplevel(self.root); win.title("Quick Parts"); win.geometry("360x300")
+        win.transient(self.root)
+        lb = tk.Listbox(win); lb.pack(fill="both", expand=True, padx=8, pady=6)
+        for k in parts: lb.insert("end", k)
+
+        def insert():
+            if lb.curselection():
+                self.insert_text(parts[lb.get(lb.curselection()[0])]); win.destroy()
+
+        def save_sel():
+            try: t = self.text.get("sel.first", "sel.last")
+            except Exception:
+                messagebox.showinfo("Quick Parts", "Select text first.", parent=win); return
+            name = simpledialog.askstring("Quick Parts", "Save as:", parent=win)
+            if name:
+                parts[name] = t; self._save_settings(); win.destroy()
+
+        brow = ttk.Frame(win); brow.pack(pady=4)
+        ttk.Button(brow, text="Insert", command=insert).pack(side="left", padx=4)
+        ttk.Button(brow, text="Save selection", command=save_sel).pack(side="left", padx=4)
+
+    def insert_chart(self):
+        spec = extras.chart_dialog(self.root)
+        if not spec:
+            return
+        try:
+            img = extras.build_chart_image(spec)
+        except ImportError:
+            messagebox.showerror("Chart", "Charts need matplotlib:\n\npip install matplotlib")
+            return
+        from PIL import ImageTk
+        ph = ImageTk.PhotoImage(img); self._images.append(ph)
+        self.text.image_create("insert", image=ph)
+        self.text.insert("insert", f"\nFigure: {spec.get('title', 'Chart')}\n")
+
+    def insert_wordart(self):
+        spec = extras.wordart_dialog(self.root)
+        if not spec:
+            return
+        from PIL import ImageTk
+        ph = ImageTk.PhotoImage(extras.build_wordart_image(spec["text"], spec["style"]))
+        self._images.append(ph)
+        self.text.image_create("insert", image=ph)
+        self.text.insert("insert", "\n")
+
+    def insert_screenshot(self):
+        try:
+            self.root.iconify(); self.root.update()
+            import time as _t; _t.sleep(0.4)
+            img = extras.screenshot_grab()
+            self.root.deiconify()
+            img.thumbnail((640, 640))
+            from PIL import ImageTk
+            ph = ImageTk.PhotoImage(img); self._images.append(ph)
+            self.text.image_create("insert", image=ph)
+            self.text.insert("insert", " [Screenshot]\n")
+        except Exception as ex:
+            try: self.root.deiconify()
+            except Exception: pass
+            messagebox.showerror("Screenshot", str(ex))
+
+    def toggle_typewriter(self):
+        self.typewriter = not self.typewriter
+        self.update_status(f"Typewriter mode: {'on' if self.typewriter else 'off'}")
+
+    def toggle_fullscreen(self):
+        try:
+            cur = bool(self.root.attributes("-fullscreen"))
+            self.root.attributes("-fullscreen", not cur)
+        except Exception: pass
+
+    def refresh_changes(self):
+        try:
+            self.chg_lb.delete(0, "end")
+            for c in getattr(self.doc, "changes", []):
+                if isinstance(c, dict):
+                    self.chg_lb.insert("end", f"{c.get('author', '?')} {c.get('kind', '')}: {c.get('text', '')[:50]}")
+        except Exception: pass
+
     # ================= nav / panes =================
     def refresh_nav(self):
         self.nav_lb.delete(0, "end"); self._nav_pos = []
@@ -1714,6 +1969,8 @@ class WordSoftApp:
         r.bind("<Control-h>", lambda e: self.replace_dialog())
         r.bind("<Control-g>", lambda e: self.goto())
         r.bind("<F7>", lambda e: self.spell_dialog())
+        r.bind("<F11>", lambda e: self.toggle_fullscreen())
+        r.bind("<Control-comma>", lambda e: self.preferences())
         r.bind("<F4>", lambda e: self.repeat())
         r.bind("<Control-b>", lambda e: (self.toggle_tag("bold"), "break")[1])
         r.bind("<Control-i>", lambda e: (self.toggle_tag("italic"), "break")[1])
@@ -1741,7 +1998,7 @@ class WordSoftApp:
     def on_modified(self, _e=None):
         if self.text.edit_modified():
             self.text.edit_modified(False)
-            self.refresh_nav(); self.refresh_comments(); self.update_status()
+            self.refresh_nav(); self.refresh_comments(); self.refresh_changes(); self.update_status()
 
     def on_keyrelease(self, e=None):
         if self.smart.get() and e and e.char in (" ", "\r", "."):
@@ -1766,6 +2023,20 @@ class WordSoftApp:
                 elif re.match(r"^1\.\s", t):
                     self.text.insert("insert", "1. ")
                     self.text.tag_add("List Number", "insert linestart", "insert lineend")
+                m = re.match(r"^=lorem\((\d+)?\)$", t.strip(), re.I)
+                if m:
+                    self.text.delete(f"{prev}.0", f"{prev}.end")
+                    self.text.insert(f"{prev}.0", extras.lorem_text(int(m.group(1) or 3)))
+            except Exception: pass
+        self._dirty = True
+        if self.typewriter:
+            try:
+                self.text.see("insert")
+                bbox = self.text.dlineinfo("insert")
+                if bbox:
+                    first, last = self.text.yview()
+                    caret_abs = first + (bbox[1] / max(1, self.text.winfo_height())) * (last - first)
+                    self.text.yview_moveto(max(0.0, caret_abs - (last - first) / 2))
             except Exception: pass
         self.update_status()
 
@@ -1778,6 +2049,11 @@ class WordSoftApp:
         self.word_lbl.configure(text=f"{msg + '  •  ' if msg else ''}{words} words")
         self.track_lbl.configure(text=f"Track: {'ON' if self.track.get() else 'off'}")
         self.zoom_lbl.configure(text=f"{int(self.zoom * 100)}%")
+        if self.goal > 0:
+            pct = min(100, int(words / self.goal * 100))
+            self.goal_lbl.configure(text=f"Goal: {pct}% of {self.goal}  {'█' * (pct // 10)}{'░' * (10 - pct // 10)}")
+        else:
+            self.goal_lbl.configure(text="")
 
     def about(self):
         messagebox.showinfo(f"About {BRAND['name']}",
