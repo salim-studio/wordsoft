@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
-"""WordSoft engine — نموذج المستند مستقل عن الواجهة (مثل wordcraft-doc).
-يدعم: فقرات + Runs بتنسيق، عناوين، قوائم، جداول، صور (مسارات)، تعداد كلمات.
+"""WordSoft engine — UI-independent document model.
+
+Supports: formatted paragraphs + runs, headings, lists, tables,
+images (paths), and word counts.
+
+Copyright (c) 2026 salim-slimani. MIT License.
 """
 from __future__ import annotations
 import re
@@ -15,8 +19,8 @@ class Run:
     italic: bool = False
     underline: bool = False
     strike: bool = False
-    color: str | None = None        # hex مثل FF0000
-    highlight: str | None = None    # hex خلفية
+    color: str | None = None        # hex, e.g. FF0000
+    highlight: str | None = None    # hex background
     font: str | None = None
     size: int | None = None         # pt
 
@@ -48,72 +52,72 @@ Block = Paragraph | Table
 
 @dataclass
 class WordDoc:
-    title: str = "مستند بدون عنوان"
-    author: str = "WordSoft"
+    title: str = "Untitled document"
+    author: str = "salim-slimani"
     blocks: list = field(default_factory=list)
     track_changes: bool = False
 
-    # ---------- إنشاء ----------
+    # ---------- constructors ----------
     @classmethod
-    def blank(cls, title="مستند بدون عنوان") -> "WordDoc":
+    def blank(cls, title="Untitled document") -> "WordDoc":
         d = cls(title=title)
         d.blocks.append(Paragraph([Run("")], style="Normal"))
         return d
 
     @classmethod
     def sample(cls) -> "WordDoc":
-        """مستند عينة عربي مثل The Open Studio Handbook في WordCraft."""
-        d = cls(title="دليل الاستوديو المفتوح — WordSoft")
-        d.blocks.append(Paragraph([Run("دليل الاستوديو المفتوح", bold=True, size=28)], style="Title", align="center"))
-        d.blocks.append(Paragraph([Run("اكتب وصمّم مستنداتك — معالج نصوص عربي حر مستوحى من WordCraft", size=13)], style="Subtitle", align="center"))
-        d.blocks.append(Paragraph([Run("مقدمة", bold=True, size=18)], style="Heading 1"))
-        d.blocks.append(Paragraph([Run("مرحباً بك في ") , Run("WordSoft", bold=True), Run(" — معالج النصوص العربي الخفيف الذي يعمل فوراً: تبويبات الشريط، الأنماط، الجداول، تعداد الكلمات، والتصدير إلى DOCX و PDF. جرّب تحديد هذا السطر واضغط "), Run("Ctrl+B", bold=True), Run(" للعريض.")]))
-        d.blocks.append(Paragraph([Run("الأنماط", bold=True, size=18)], style="Heading 1"))
-        d.blocks.append(Paragraph([Run("استخدم معرض الأنماط من تبويب الرئيسية: عنوان، عنوان 1، عنوان 2، اقتباس، وقوائم نقطية ومرقمة. كل نمط يظهر بمعاينة حية.")], style="Normal"))
-        d.blocks.append(Paragraph([Run("عنوان فرعي تجريبي", bold=True, size=15)], style="Heading 2"))
-        d.blocks.append(Paragraph([Run("هذا اقتباس تجريبي يوضح نمط الاقتباس في WordSoft.", italic=True)], style="Quote"))
-        d.blocks.append(Paragraph([Run("نقطة أولى: الكتابة السريعة مع تراجع وإعادة")], style="List Bullet"))
-        d.blocks.append(Paragraph([Run("نقطة ثانية: فتح وحفظ DOCX يعمل مع Word")], style="List Bullet"))
-        d.blocks.append(Paragraph([Run("خطوة أولى: افتح تبويب إدراج وأضف جدولاً")], style="List Number"))
-        d.blocks.append(Paragraph([Run("خطوة ثانية: صدّر إلى PDF من قائمة ملف")], style="List Number"))
-        d.blocks.append(Paragraph([Run("جدول تجريبي", bold=True, size=18)], style="Heading 1"))
-        t = Table(rows=[["العنصر", "الوصف", "الحالة"], ["الأنماط", "عناوين + اقتباس + قوائم", "يعمل"], ["الجداول", "إدراج وتحرير وتصدير", "يعمل"], ["PDF", "تصدير حقيقي بنص قابل للتحديد", "يعمل"]], header=True)
+        """Built-in English sample document: 'The Open Studio Handbook'."""
+        d = cls(title="The Open Studio Handbook — WordSoft")
+        d.blocks.append(Paragraph([Run("The Open Studio Handbook", bold=True, size=28)], style="Title", align="center"))
+        d.blocks.append(Paragraph([Run("Write beautifully — a fast, friendly word processor", size=13)], style="Subtitle", align="center"))
+        d.blocks.append(Paragraph([Run("Introduction", bold=True, size=18)], style="Heading 1"))
+        d.blocks.append(Paragraph([Run("Welcome to "), Run("WordSoft", bold=True), Run(" — a lightweight word processor that just works: the ribbon tabs, styles, tables, word counts, and export to DOCX and PDF. Try selecting this sentence and pressing "), Run("Ctrl+B", bold=True), Run(" for bold.")]))
+        d.blocks.append(Paragraph([Run("Styles", bold=True, size=18)], style="Heading 1"))
+        d.blocks.append(Paragraph([Run("Use the style gallery on the Home tab: Title, Heading 1, Heading 2, Quote, and bulleted or numbered lists. Every style previews live in the document.")], style="Normal"))
+        d.blocks.append(Paragraph([Run("A sample subheading", bold=True, size=15)], style="Heading 2"))
+        d.blocks.append(Paragraph([Run("This is a sample quote showing the Quote style in WordSoft.", italic=True)], style="Quote"))
+        d.blocks.append(Paragraph([Run("First point: fast typing with undo and redo")], style="List Bullet"))
+        d.blocks.append(Paragraph([Run("Second point: DOCX open and save that works with Word")], style="List Bullet"))
+        d.blocks.append(Paragraph([Run("First step: open the Insert tab and add a table")], style="List Number"))
+        d.blocks.append(Paragraph([Run("Second step: export to PDF from the File menu")], style="List Number"))
+        d.blocks.append(Paragraph([Run("Sample table", bold=True, size=18)], style="Heading 1"))
+        t = Table(rows=[["Item", "Description", "Status"], ["Styles", "headings + quotes + lists", "Works"], ["Tables", "insert, edit and export", "Works"], ["PDF", "real export with selectable text", "Works"]], header=True)
         d.blocks.append(t)
-        d.blocks.append(Paragraph([Run("خاتمة", bold=True, size=18)], style="Heading 1"))
-        d.blocks.append(Paragraph([Run("WordSoft مستوحى من فكرة WordCraft (إعادة بناء Word مفتوحة المصدر) لكن مكتوباً بلغة Python ليعمل فوراً بدون تجميع. كل الأوامر معرفة بمعرفات مثل WordCraft لتكون قابلة للأتمتة عبر CLI.")]))
+        d.blocks.append(Paragraph([Run("Conclusion", bold=True, size=18)], style="Heading 1"))
+        d.blocks.append(Paragraph([Run("WordSoft is written in Python so it runs instantly with no build step. Every action is also available headlessly through the CLI, so documents can be automated.")]))
         return d
 
     @classmethod
     def template(cls, kind: str) -> "WordDoc":
         if kind == "sample":
             return cls.sample()
-        d = cls(title={"letter": "رسالة رسمية", "report": "تقرير", "resume": "سيرة ذاتية"}.get(kind, "مستند بدون عنوان"))
+        d = cls(title={"letter": "Formal letter", "report": "Report", "resume": "Resume"}.get(kind, "Untitled document"))
         if kind == "letter":
-            d.blocks.append(Paragraph([Run("الاسم الكامل", bold=True, size=16)], align="right"))
-            d.blocks.append(Paragraph([Run("التاريخ: .... / .... / ......")], align="right"))
-            d.blocks.append(Paragraph([Run("الموضوع: ....................", bold=True)], align="right"))
-            d.blocks.append(Paragraph([Run("السلام عليكم ورحمة الله وبركاته،")], align="right"))
-            d.blocks.append(Paragraph([Run("أما بعد، يشرفني أن أتقدم إليكم بـ...")], align="right"))
-            d.blocks.append(Paragraph([Run("وتقبلوا فائق الاحترام والتقدير.")], align="right"))
-            d.blocks.append(Paragraph([Run("التوقيع", italic=True)], align="right"))
+            d.blocks.append(Paragraph([Run("Full name", bold=True, size=16)], align="left"))
+            d.blocks.append(Paragraph([Run("Date: .... / .... / ......")], align="left"))
+            d.blocks.append(Paragraph([Run("Subject: ....................", bold=True)], align="left"))
+            d.blocks.append(Paragraph([Run("Dear Sir or Madam,")], align="left"))
+            d.blocks.append(Paragraph([Run("I am writing to...")], align="left"))
+            d.blocks.append(Paragraph([Run("Yours faithfully,")], align="left"))
+            d.blocks.append(Paragraph([Run("Signature", italic=True)], align="left"))
         elif kind == "report":
-            d.blocks.append(Paragraph([Run("تقرير", bold=True, size=26)], style="Title", align="center"))
-            d.blocks.append(Paragraph([Run("ملخص تنفيذي", bold=True, size=18)], style="Heading 1"))
-            d.blocks.append(Paragraph([Run("اكتب الملخص هنا...")]))
-            d.blocks.append(Paragraph([Run("النتائج", bold=True, size=18)], style="Heading 1"))
-            d.blocks.append(Paragraph([Run("النتيجة الأولى...")], style="List Bullet"))
-            d.blocks.append(Paragraph([Run("التوصيات", bold=True, size=18)], style="Heading 1"))
+            d.blocks.append(Paragraph([Run("Report", bold=True, size=26)], style="Title", align="center"))
+            d.blocks.append(Paragraph([Run("Executive summary", bold=True, size=18)], style="Heading 1"))
+            d.blocks.append(Paragraph([Run("Write the summary here...")]))
+            d.blocks.append(Paragraph([Run("Findings", bold=True, size=18)], style="Heading 1"))
+            d.blocks.append(Paragraph([Run("First finding...")], style="List Bullet"))
+            d.blocks.append(Paragraph([Run("Recommendations", bold=True, size=18)], style="Heading 1"))
         elif kind == "resume":
-            d.blocks.append(Paragraph([Run("الاسم الكامل", bold=True, size=24)], style="Title", align="center"))
-            d.blocks.append(Paragraph([Run("البريد | الهاتف | العنوان")], align="center"))
-            d.blocks.append(Paragraph([Run("الخبرات", bold=True, size=18)], style="Heading 1"))
-            d.blocks.append(Paragraph([Run("المسمى الوظيفي — الشركة (السنة)")], style="List Bullet"))
-            d.blocks.append(Paragraph([Run("المهارات", bold=True, size=18)], style="Heading 1"))
+            d.blocks.append(Paragraph([Run("Full name", bold=True, size=24)], style="Title", align="center"))
+            d.blocks.append(Paragraph([Run("Email | Phone | Address")], align="center"))
+            d.blocks.append(Paragraph([Run("Experience", bold=True, size=18)], style="Heading 1"))
+            d.blocks.append(Paragraph([Run("Job title — Company (Year)")], style="List Bullet"))
+            d.blocks.append(Paragraph([Run("Skills", bold=True, size=18)], style="Heading 1"))
         else:
             return cls.blank()
         return d
 
-    # ---------- إحصاء ----------
+    # ---------- stats ----------
     def full_text(self) -> str:
         out = []
         for b in self.blocks:
@@ -135,7 +139,7 @@ class WordDoc:
                 "pages": pages}
 
     def headings(self) -> list[tuple[str, str]]:
-        """للتنقل: (style, text) للعناوين فقط."""
+        """Navigation helper: (style, text) for headings only."""
         out = []
         for b in self.blocks:
             if isinstance(b, Paragraph) and b.style.startswith("Heading") and b.text().strip():

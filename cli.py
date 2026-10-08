@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-"""WordSoft CLI — مثل wordcraft-cli: تحويل وفحص وأتمتة بدون واجهة.
-استخدام:
+"""WordSoft CLI — convert, inspect and automate documents headlessly.
+
+Usage:
   python cli.py convert in.docx out.pdf
   python cli.py text in.docx
   python cli.py stats in.docx
   python cli.py inspect in.docx
   python cli.py new --template sample --save out.docx
+
+Copyright (c) 2026 salim-slimani. MIT License.
 """
 import sys, json, argparse
 from engine import WordDoc
@@ -39,13 +42,13 @@ def cmd_new(a):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="wordsoft-cli", description="WordSoft CLI")
+    ap = argparse.ArgumentParser(prog="wordsoft-cli", description="WordSoft CLI — headless document automation")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    c = sub.add_parser("convert"); c.add_argument("src"); c.add_argument("dst"); c.set_defaults(f=cmd_convert)
-    t = sub.add_parser("text"); t.add_argument("src"); t.set_defaults(f=cmd_text)
-    s = sub.add_parser("stats"); s.add_argument("src"); s.set_defaults(f=cmd_stats)
-    ins = sub.add_parser("inspect"); ins.add_argument("src"); ins.set_defaults(f=cmd_inspect)
-    n = sub.add_parser("new"); n.add_argument("--template", default="sample"); n.add_argument("--save", required=True); n.set_defaults(f=cmd_new)
+    c = sub.add_parser("convert", help="convert between docx/pdf/html/md/txt"); c.add_argument("src"); c.add_argument("dst"); c.set_defaults(f=cmd_convert)
+    t = sub.add_parser("text", help="print plain text"); t.add_argument("src"); t.set_defaults(f=cmd_text)
+    s = sub.add_parser("stats", help="print word/char/paragraph stats"); s.add_argument("src"); s.set_defaults(f=cmd_stats)
+    ins = sub.add_parser("inspect", help="print document structure as JSON"); ins.add_argument("src"); ins.set_defaults(f=cmd_inspect)
+    n = sub.add_parser("new", help="create a document from a template"); n.add_argument("--template", default="sample"); n.add_argument("--save", required=True); n.set_defaults(f=cmd_new)
     a = ap.parse_args(argv)
     a.f(a)
 

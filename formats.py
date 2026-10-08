@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-"""WordSoft formats — فتح وحفظ: docx / txt / md / html / pdf (مثل wordcraft-cli convert)."""
+"""WordSoft formats — open and save: docx / txt / md / html / pdf.
+
+Same idea as a `convert` command: one document model, many file types.
+
+Copyright (c) 2026 salim-slimani. MIT License.
+"""
 from __future__ import annotations
 import re, html as ihtml
 from engine import WordDoc, Paragraph, Run, Table
@@ -57,9 +62,8 @@ def save_docx(doc: WordDoc, path: str):
 
 def load_docx(path: str) -> WordDoc:
     from docx import Document
-    from docx.enum.text import WD_ALIGN_PARAGRAPH as WD_ALIGN
     wd = Document(path)
-    doc = WordDoc(title=getattr(wd.core_properties, "title", "") or "مستند مستورد")
+    doc = WordDoc(title=getattr(wd.core_properties, "title", "") or "Imported document")
     rev = {v: k for k, v in STYLE2DOCX.items()}
     for p in wd.paragraphs:
         if not p.text and not p.runs:
@@ -97,7 +101,7 @@ def save_txt(doc: WordDoc, path: str):
 def load_txt(path: str) -> WordDoc:
     with open(path, encoding="utf-8") as f:
         lines = f.read().splitlines()
-    doc = WordDoc(title="مستند نصي")
+    doc = WordDoc(title="Text document")
     for ln in lines:
         if ln.startswith("# "): doc.blocks.append(Paragraph([Run(ln[2:], bold=True, size=18)], style="Heading 1"))
         elif ln.startswith("## "): doc.blocks.append(Paragraph([Run(ln[3:], bold=True)], style="Heading 2"))
@@ -125,16 +129,20 @@ def save_md(doc: WordDoc, path: str):
             elif b.style == "List Bullet": out.append(f"- {t}")
             elif b.style == "List Number": out.append(f"1. {t}")
             else:
-                md = t
-                # تنسيق أساسي للفقرة الأولى فقط (تبسيط)
-                out.append(md)
+                out.append(t)
             out.append("")
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(out))
 
+BRAND_BLUE = "#2563EB"
+
 def save_html(doc: WordDoc, path: str):
-    parts = [f"<html dir='auto'><head><meta charset='utf-8'><title>{ihtml.escape(doc.title)}</title>",
-             "<style>body{font-family:Segoe UI,Arial;max-width:800px;margin:40px auto;line-height:1.8;padding:0 16px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:6px}blockquote{border-right:4px solid #0e639c;background:#f3f3f3;padding:8px 14px}</style></head><body>",
+    parts = [f"<html lang='en'><head><meta charset='utf-8'><title>{ihtml.escape(doc.title)}</title>",
+             f"<style>body{{font-family:'Segoe UI',Arial,sans-serif;max-width:800px;margin:40px auto;line-height:1.8;padding:0 16px;color:#111}}"
+             f"h1{{color:#111}}h2{{color:{BRAND_BLUE}}}table{{border-collapse:collapse;width:100%}}"
+             f"td,th{{border:1px solid #999;padding:6px}}th{{background:#e8eefc}}"
+             f"blockquote{{border-left:4px solid {BRAND_BLUE};background:#f3f6ff;padding:8px 14px;margin:8px 0}}"
+             f"footer{{color:#888;font-size:12px;margin-top:32px}}</style></head><body>",
              f"<h1>{ihtml.escape(doc.title)}</h1>"]
     for b in doc.blocks:
         if isinstance(b, Table):
@@ -147,16 +155,18 @@ def save_html(doc: WordDoc, path: str):
             t = "".join(f"<b>{ihtml.escape(r.text)}</b>" if r.bold else ihtml.escape(r.text) for r in b.runs)
             if b.style == "Heading 1": parts.append(f"<h2>{t}</h2>")
             elif b.style == "Heading 2": parts.append(f"<h3>{t}</h3>")
+            elif b.style == "Heading 3": parts.append(f"<h4>{t}</h4>")
             elif b.style == "Quote": parts.append(f"<blockquote>{t}</blockquote>")
             elif b.style == "List Bullet": parts.append(f"<ul><li>{t}</li></ul>")
             elif b.style == "List Number": parts.append(f"<ol><li>{t}</li></ol>")
             else: parts.append(f"<p style='text-align:{b.align}'>{t}</p>")
-    parts.append("</body></html>")
+    parts.append("<footer>Created with WordSoft — Copyright (c) 2026 salim-slimani</footer></body></html>")
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(parts))
 
 # ---------------- PDF ----------------
-def _ar(text: str) -> str:
+def _shape(text: str) -> str:
+    """Reshape RTL text (Arabic/Hebrew) so ReportLab renders it correctly."""
     try:
         import arabic_reshaper
         from bidi.algorithm import get_display
@@ -173,7 +183,7 @@ def save_pdf(doc: WordDoc, path: str):
     from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
     import html as H
     amap = {"left": TA_LEFT, "center": TA_CENTER, "right": TA_RIGHT, "justify": TA_JUSTIFY}
-    # خط يدعم العربية إن وجد وإلا Helvetica
+    # Prefer a TTF with broad Unicode coverage when available, else Helvetica.
     import os
     font = "Helvetica"
     fontB = "Helvetica-Bold"
@@ -194,18 +204,17 @@ def save_pdf(doc: WordDoc, path: str):
     st_h1 = ParagraphStyle("h1", fontName=fontB, fontSize=16, spaceBefore=14, spaceAfter=6)
     st_h2 = ParagraphStyle("h2", fontName=fontB, fontSize=13, spaceBefore=10, spaceAfter=4)
     st_n = ParagraphStyle("n", fontName=font, fontSize=11, leading=17, alignment=TA_JUSTIFY, spaceAfter=6)
-    story.append(P(H.escape(_ar(doc.title)), st_title)); story.append(Spacer(1, 4 * mm))
+    story.append(P(H.escape(_shape(doc.title)), st_title)); story.append(Spacer(1, 4 * mm))
     for b in doc.blocks:
         if isinstance(b, Table):
-            data = [[H.escape(_ar(c)) for c in row] for row in b.rows]
-            # اعكس ترتيب الأعمدة للعربية
+            data = [[H.escape(_shape(c)) for c in row] for row in b.rows]
             t = PT(data, repeatRows=1 if b.header else 0)
             t.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.6, colors.grey),
-                                   ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8eef5")),
+                                   ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8eefc")),
                                    ("FONTSIZE", (0, 0), (-1, -1), 9), ("FONTNAME", (0, 0), (-1, -1), font)]))
             story.append(t); story.append(Spacer(1, 3 * mm))
         else:
-            txt = "".join(f"<b>{H.escape(_ar(r.text))}</b>" if r.bold else H.escape(_ar(r.text)) for r in b.runs) or " "
+            txt = "".join(f"<b>{H.escape(_shape(r.text))}</b>" if r.bold else H.escape(_shape(r.text)) for r in b.runs) or " "
             if b.style == "Title": story.append(P(txt, st_title))
             elif b.style == "Heading 1": story.append(P(txt, st_h1))
             elif b.style == "Heading 2": story.append(P(txt, st_h2))
@@ -216,7 +225,7 @@ def save_pdf(doc: WordDoc, path: str):
                       rightMargin=20 * mm, leftMargin=20 * mm,
                       title=doc.title, author=doc.author).build(story)
 
-# ---------------- موجه عام ----------------
+# ---------------- dispatcher ----------------
 def save(doc: WordDoc, path: str):
     p = path.lower()
     if p.endswith(".docx"): return save_docx(doc, path)

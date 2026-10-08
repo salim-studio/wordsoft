@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
-"""WordSoft — معالج نصوص عربي بأسلوب Word، مستوحى من WordCraft.
-تشغيل:  python app.py   أو   python -m Wordsoft
-المتطلبات: python-docx + reportlab + pillow (tkinter مدمجة).
+"""WordSoft — Write beautifully. A fast, friendly word processor.
+
+Run:  python app.py   or   python -m Wordsoft
+Requires: python-docx + reportlab + pillow (tkinter is built in).
+
+Copyright (c) 2026 salim-slimani. MIT License.
 """
 import os, re, datetime
 import tkinter as tk
@@ -10,17 +13,20 @@ from tkinter import ttk, filedialog, messagebox, simpledialog, colorchooser, fon
 from engine import WordDoc, Paragraph, Run, Table
 import formats
 
-DARK = {"bg": "#1e1e1e", "panel": "#252526", "panel2": "#2d2d30", "doc": "#1b1b1b",
-        "page": "#2b2b2b", "fg": "#e8e8e8", "muted": "#9a9a9a", "accent": "#0e639c", "border": "#3e3e42"}
-LIGHT = {"bg": "#f3f3f3", "panel": "#ffffff", "panel2": "#eef1f5", "doc": "#e5e5e5",
-         "page": "#ffffff", "fg": "#1e1e1e", "muted": "#666666", "accent": "#2b579a", "border": "#d4d4d4"}
+BRAND = {"name": "WordSoft", "tagline": "Write beautifully.",
+         "blue": "#2563EB", "version": "2.0.0"}
+
+DARK = {"bg": "#161a23", "panel": "#1f2530", "panel2": "#2a3242", "doc": "#10141b",
+        "page": "#232b3a", "fg": "#e8eaf0", "muted": "#8b94a7", "accent": "#2563EB", "border": "#39435a"}
+LIGHT = {"bg": "#eef1f6", "panel": "#ffffff", "panel2": "#e8edf5", "doc": "#dde3ee",
+         "page": "#ffffff", "fg": "#1a2233", "muted": "#5b6478", "accent": "#2563EB", "border": "#cdd6e4"}
 
 FONTS = ["Arial", "Segoe UI", "Times New Roman", "Courier New", "Calibri",
          "Traditional Arabic", "Simplified Arabic", "Amiri", "Tahoma"]
 SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 48]
 STYLES = ["Normal", "Title", "Heading 1", "Heading 2", "Heading 3", "Quote", "List Bullet", "List Number"]
-STYLES_AR = {"Normal": "عادي", "Title": "عنوان", "Heading 1": "عنوان 1", "Heading 2": "عنوان 2",
-             "Heading 3": "عنوان 3", "Quote": "اقتباس", "List Bullet": "• نقطية", "List Number": "1. مرقمة"}
+STYLE_LABELS = {"Normal": "Normal", "Title": "Title", "Heading 1": "Heading 1", "Heading 2": "Heading 2",
+                "Heading 3": "Heading 3", "Quote": "Quote", "List Bullet": "Bullets", "List Number": "Numbering"}
 
 OPEN_TYPES = [("Word / Text", "*.docx *.txt *.md"), ("Word", "*.docx"), ("Text", "*.txt *.md"), ("All", "*.*")]
 SAVE_DOCX = [("Word Document", "*.docx")]
@@ -31,7 +37,7 @@ AUTOCORRECT = {"(c)": "©", "(r)": "®", "...": "…", "--": "–", "teh": "the"
 class WordSoftApp:
     def __init__(self, root, path=None):
         self.root = root
-        root.title("WordSoft — معالج النصوص")
+        root.title(f"{BRAND['name']} — {BRAND['tagline']}")
         root.geometry("1380x860")
         self.theme = DARK
         self.dark_mode = True
@@ -41,7 +47,8 @@ class WordSoftApp:
         self.tables: dict[str, Table] = {}   # line_index -> Table
         self.track = tk.BooleanVar(value=False)
         self.smart = tk.BooleanVar(value=True)
-        self._images = []  # منع Garbage Collection
+        self._images = []  # keep PhotoImage refs alive
+        self._set_icon()
         self._style()
         self._menu()
         self._ribbon()
@@ -52,6 +59,17 @@ class WordSoftApp:
         self._bind_keys()
         if path and os.path.exists(path):
             self.open_path(path)
+
+    def _set_icon(self):
+        for cand in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "icon.png"),
+                     os.path.join("assets", "icon.png")):
+            if os.path.exists(cand):
+                try:
+                    self._icon = tk.PhotoImage(file=cand)
+                    self.root.iconphoto(True, self._icon)
+                except Exception:
+                    pass
+                break
 
     # ---------- theme ----------
     def _style(self):
@@ -82,40 +100,46 @@ class WordSoftApp:
     def _menu(self):
         m = tk.Menu(self.root); self.root.config(menu=m)
         fm = tk.Menu(m, tearoff=0)
-        fm.add_command(label="جديد Ctrl+N", command=self.file_new)
-        fm.add_command(label="فتح Ctrl+O", command=self.file_open)
-        fm.add_command(label="حفظ Ctrl+S", command=self.file_save)
-        fm.add_command(label="حفظ باسم...", command=self.file_saveas)
+        fm.add_command(label="New  Ctrl+N", command=self.file_new)
+        fm.add_command(label="Open  Ctrl+O", command=self.file_open)
+        fm.add_command(label="Save  Ctrl+S", command=self.file_save)
+        fm.add_command(label="Save As...", command=self.file_saveas)
         fm.add_separator()
-        fm.add_command(label="تصدير PDF", command=self.export_pdf)
-        fm.add_command(label="تصدير HTML", command=self.export_html)
-        fm.add_command(label="تصدير Markdown", command=self.export_md)
-        fm.add_command(label="تصدير TXT", command=self.export_txt)
+        fm.add_command(label="Export PDF", command=self.export_pdf)
+        fm.add_command(label="Export HTML", command=self.export_html)
+        fm.add_command(label="Export Markdown", command=self.export_md)
+        fm.add_command(label="Export TXT", command=self.export_txt)
         fm.add_separator()
-        fm.add_command(label="خصائص المستند", command=self.doc_props)
-        fm.add_command(label="خروج", command=self.root.quit)
-        m.add_cascade(label="ملف", menu=fm)
+        fm.add_command(label="Document properties", command=self.doc_props)
+        fm.add_command(label="Exit", command=self.root.quit)
+        m.add_cascade(label="File", menu=fm)
         em = tk.Menu(m, tearoff=0)
-        em.add_command(label="تراجع Ctrl+Z", command=lambda: self.text.edit_undo())
-        em.add_command(label="إعادة Ctrl+Y", command=lambda: self.text.edit_redo())
+        em.add_command(label="Undo  Ctrl+Z", command=lambda: self.text.edit_undo())
+        em.add_command(label="Redo  Ctrl+Y", command=lambda: self.text.edit_redo())
         em.add_separator()
-        em.add_command(label="بحث Ctrl+F", command=self.find_dialog)
-        em.add_command(label="استبدال Ctrl+H", command=self.replace_dialog)
-        em.add_command(label="تحديد الكل Ctrl+A", command=lambda: self.text.tag_add("sel", "1.0", "end"))
-        m.add_cascade(label="تحرير", menu=em)
+        em.add_command(label="Find  Ctrl+F", command=self.find_dialog)
+        em.add_command(label="Replace  Ctrl+H", command=self.replace_dialog)
+        em.add_command(label="Select All  Ctrl+A", command=lambda: self.text.tag_add("sel", "1.0", "end"))
+        m.add_cascade(label="Edit", menu=em)
         vm = tk.Menu(m, tearoff=0)
-        vm.add_command(label="تكبير +", command=lambda: self.set_zoom(self.zoom + 0.1))
-        vm.add_command(label="تصغير −", command=lambda: self.set_zoom(self.zoom - 0.1))
-        vm.add_command(label="وضع داكن/فاتح", command=self.toggle_theme)
-        vm.add_command(label="إخفاء/إظهار التنقل", command=self.toggle_nav)
-        m.add_cascade(label="عرض", menu=vm)
-        m.add_command(label="حول WordSoft", command=self.about)
+        vm.add_command(label="Zoom In", command=lambda: self.set_zoom(self.zoom + 0.1))
+        vm.add_command(label="Zoom Out", command=lambda: self.set_zoom(self.zoom - 0.1))
+        vm.add_command(label="Dark / Light mode", command=self.toggle_theme)
+        vm.add_command(label="Show / Hide navigation", command=self.toggle_nav)
+        m.add_cascade(label="View", menu=vm)
+        m.add_command(label=f"About {BRAND['name']}", command=self.about)
 
     # ---------- ribbon ----------
     def _ribbon(self):
         bar = ttk.Frame(self.root); bar.pack(side="top", fill="x")
-        ttk.Label(bar, text=" WordSoft ", font=("Segoe UI", 13, "bold"),
-                  foreground="#2b579a").pack(side="left", padx=6)
+        brand = tk.Label(bar, text=" W ", font=("Segoe UI", 14, "bold"),
+                         bg=BRAND["blue"], fg="white")
+        brand.pack(side="left", padx=(8, 2), pady=4)
+        tk.Label(bar, text=f" {BRAND['name']}  ", font=("Segoe UI", 13, "bold"),
+                 bg=self.theme["panel"], fg=BRAND["blue"] if False else self.theme["fg"]).pack(side="left")
+        self.brand_sub = tk.Label(bar, text=BRAND["tagline"], font=("Segoe UI", 9, "italic"),
+                                  bg=self.theme["panel"], fg=self.theme["muted"])
+        self.brand_sub.pack(side="left", padx=(0, 8))
         self.nb = ttk.Notebook(bar); self.nb.pack(side="left", fill="x", expand=True, padx=4, pady=2)
         self._tab_home()
         self._tab_insert()
@@ -124,8 +148,8 @@ class WordSoftApp:
         self._tab_view()
 
     def _tab_home(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text=" الرئيسية ")
-        # الخط
+        f = ttk.Frame(self.nb); self.nb.add(f, text=" Home ")
+        # Font
         self.font_var = tk.StringVar(value="Arial")
         cb = ttk.Combobox(f, textvariable=self.font_var, values=FONTS, width=16, state="readonly")
         cb.pack(side="left", padx=2); cb.bind("<<ComboboxSelected>>", lambda e: self.apply_font())
@@ -135,76 +159,74 @@ class WordSoftApp:
         for txt, tag in [("B", "bold"), ("I", "italic"), ("U", "underline"), ("S", "strike")]:
             b = ttk.Button(f, text=txt, width=3, command=lambda t=tag: self.toggle_tag(t))
             b.pack(side="left", padx=1)
-            if tag in ("bold",): b.configure(style="TButton")
-        ttk.Button(f, text="لون A", width=5, command=self.pick_fg).pack(side="left", padx=2)
-        ttk.Button(f, text="تمييز", width=5, command=self.pick_hl).pack(side="left", padx=1)
+        ttk.Button(f, text="Color A", width=7, command=self.pick_fg).pack(side="left", padx=2)
+        ttk.Button(f, text="Highlight", width=8, command=self.pick_hl).pack(side="left", padx=1)
         ttk.Separator(f, orient="vertical").pack(side="left", fill="y", padx=4)
-        for icon, al in [("≡ يمين", "right"), ("≡ وسط", "center"), ("≡ يسار", "left"), ("☰ ضبط", "justify")]:
-            ttk.Button(f, text=icon, width=6, command=lambda a=al: self.set_align(a)).pack(side="left", padx=1)
-        ttk.Button(f, text="RTL ◀", width=6, command=lambda: self.set_align("right")).pack(side="left", padx=1)
-        ttk.Button(f, text="• قائمة", width=7, command=lambda: self.set_style("List Bullet")).pack(side="left", padx=1)
-        ttk.Button(f, text="1. مرقمة", width=7, command=lambda: self.set_style("List Number")).pack(side="left", padx=1)
+        for icon, al in [("Right", "right"), ("Center", "center"), ("Left", "left"), ("Justify", "justify")]:
+            ttk.Button(f, text=icon, width=7, command=lambda a=al: self.set_align(a)).pack(side="left", padx=1)
+        ttk.Button(f, text="Bullets", width=7, command=lambda: self.set_style("List Bullet")).pack(side="left", padx=1)
+        ttk.Button(f, text="Numbering", width=9, command=lambda: self.set_style("List Number")).pack(side="left", padx=1)
         ttk.Separator(f, orient="vertical").pack(side="left", fill="y", padx=4)
         self.style_var = tk.StringVar(value="Normal")
-        st = ttk.Combobox(f, textvariable=self.style_var, width=10, state="readonly",
-                          values=list(STYLES_AR.values()))
+        st = ttk.Combobox(f, textvariable=self.style_var, width=11, state="readonly",
+                          values=list(STYLE_LABELS.values()))
         st.pack(side="left", padx=2); st.bind("<<ComboboxSelected>>", lambda e: self.set_style(
-            [k for k, v in STYLES_AR.items() if v == self.style_var.get()][0]))
-        ttk.Button(f, text="مسح التنسيق", command=self.clear_format).pack(side="left", padx=2)
-        ttk.Button(f, text="نسخ التنسيق", command=self.format_painter).pack(side="left", padx=1)
+            [k for k, v in STYLE_LABELS.items() if v == self.style_var.get()][0]))
+        ttk.Button(f, text="Clear formatting", command=self.clear_format).pack(side="left", padx=2)
+        ttk.Button(f, text="Format painter", command=self.format_painter).pack(side="left", padx=1)
 
     def _tab_insert(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text=" إدراج ")
-        ttk.Button(f, text="▦ جدول", command=self.insert_table_dlg).pack(side="left", padx=2)
-        ttk.Button(f, text="🖼 صورة", command=self.insert_image).pack(side="left", padx=2)
-        ttk.Button(f, text="فاصل صفحة", command=lambda: self.insert_text("\n— — فاصل صفحة — —\n")).pack(side="left", padx=2)
-        ttk.Button(f, text="رقم الصفحة", command=self.insert_pagenum).pack(side="left", padx=2)
-        ttk.Button(f, text="التاريخ", command=lambda: self.insert_text(datetime.date.today().isoformat())).pack(side="left", padx=2)
-        ttk.Button(f, text="رابط", command=self.insert_link).pack(side="left", padx=2)
-        ttk.Button(f, text="رمز Ω", command=self.insert_symbol).pack(side="left", padx=2)
-        ttk.Button(f, text="تذييل", command=lambda: self.insert_text("\n— — —\nتذييل الصفحة")).pack(side="left", padx=2)
+        f = ttk.Frame(self.nb); self.nb.add(f, text=" Insert ")
+        ttk.Button(f, text="Table", command=self.insert_table_dlg).pack(side="left", padx=2)
+        ttk.Button(f, text="Picture", command=self.insert_image).pack(side="left", padx=2)
+        ttk.Button(f, text="Page break", command=lambda: self.insert_text("\n— — page break — —\n")).pack(side="left", padx=2)
+        ttk.Button(f, text="Page number", command=self.insert_pagenum).pack(side="left", padx=2)
+        ttk.Button(f, text="Date", command=lambda: self.insert_text(datetime.date.today().isoformat())).pack(side="left", padx=2)
+        ttk.Button(f, text="Link", command=self.insert_link).pack(side="left", padx=2)
+        ttk.Button(f, text="Symbol", command=self.insert_symbol).pack(side="left", padx=2)
+        ttk.Button(f, text="Footer", command=lambda: self.insert_text("\n— — —\nPage footer")).pack(side="left", padx=2)
 
     def _tab_layout(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text=" تخطيط ")
-        ttk.Label(f, text="تباعد الأسطر:").pack(side="left", padx=2)
+        f = ttk.Frame(self.nb); self.nb.add(f, text=" Layout ")
+        ttk.Label(f, text="Line spacing:").pack(side="left", padx=2)
         self.ls_var = tk.StringVar(value="1.15")
         cb = ttk.Combobox(f, textvariable=self.ls_var, values=["1.0", "1.15", "1.5", "2.0"], width=5, state="readonly")
         cb.pack(side="left"); cb.bind("<<ComboboxSelected>>", lambda e: self.set_linespacing())
-        ttk.Button(f, text="⇥ مسافة بادئة +", command=lambda: self.indent(1)).pack(side="left", padx=2)
-        ttk.Button(f, text="⇤ مسافة بادئة −", command=lambda: self.indent(-1)).pack(side="left", padx=1)
-        ttk.Button(f, text="عمودان (تجريبي)", command=self.two_columns).pack(side="left", padx=2)
-        ttk.Button(f, text="لون الصفحة", command=self.page_color).pack(side="left", padx=2)
+        ttk.Button(f, text="Indent +", command=lambda: self.indent(1)).pack(side="left", padx=2)
+        ttk.Button(f, text="Indent −", command=lambda: self.indent(-1)).pack(side="left", padx=1)
+        ttk.Button(f, text="Two columns (experimental)", command=self.two_columns).pack(side="left", padx=2)
+        ttk.Button(f, text="Page color", command=self.page_color).pack(side="left", padx=2)
 
     def _tab_review(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text=" مراجعة ")
-        ttk.Button(f, text="🔍 تدقيق F7", command=self.spell_check).pack(side="left", padx=2)
-        ttk.Button(f, text="∑ تعداد الكلمات", command=self.wordcount_dialog).pack(side="left", padx=2)
-        ttk.Checkbutton(f, text="تعقب التغييرات", variable=self.track).pack(side="left", padx=4)
-        ttk.Button(f, text="💬 تعليق", command=self.add_comment).pack(side="left", padx=2)
-        ttk.Button(f, text="بحث واستبدال", command=self.replace_dialog).pack(side="left", padx=2)
-        ttk.Checkbutton(f, text="تصحيح تلقائي ذكي", variable=self.smart).pack(side="left", padx=4)
+        f = ttk.Frame(self.nb); self.nb.add(f, text=" Review ")
+        ttk.Button(f, text="Spelling F7", command=self.spell_check).pack(side="left", padx=2)
+        ttk.Button(f, text="Word count", command=self.wordcount_dialog).pack(side="left", padx=2)
+        ttk.Checkbutton(f, text="Track changes", variable=self.track).pack(side="left", padx=4)
+        ttk.Button(f, text="Comment", command=self.add_comment).pack(side="left", padx=2)
+        ttk.Button(f, text="Find & Replace", command=self.replace_dialog).pack(side="left", padx=2)
+        ttk.Checkbutton(f, text="Smart autocorrect", variable=self.smart).pack(side="left", padx=4)
 
     def _tab_view(self):
-        f = ttk.Frame(self.nb); self.nb.add(f, text=" عرض ")
-        ttk.Button(f, text="＋ تكبير", command=lambda: self.set_zoom(self.zoom + 0.1)).pack(side="left", padx=2)
-        ttk.Button(f, text="－ تصغير", command=lambda: self.set_zoom(self.zoom - 0.1)).pack(side="left", padx=2)
+        f = ttk.Frame(self.nb); self.nb.add(f, text=" View ")
+        ttk.Button(f, text="Zoom +", command=lambda: self.set_zoom(self.zoom + 0.1)).pack(side="left", padx=2)
+        ttk.Button(f, text="Zoom −", command=lambda: self.set_zoom(self.zoom - 0.1)).pack(side="left", padx=2)
         ttk.Button(f, text="100%", command=lambda: self.set_zoom(1.0)).pack(side="left", padx=1)
-        ttk.Button(f, text="🌙 داكن/فاتح", command=self.toggle_theme).pack(side="left", padx=2)
-        ttk.Button(f, text="🎯 تركيز", command=self.focus_mode).pack(side="left", padx=2)
-        ttk.Button(f, text="🧭 تنقل", command=self.toggle_nav).pack(side="left", padx=2)
+        ttk.Button(f, text="Dark / Light", command=self.toggle_theme).pack(side="left", padx=2)
+        ttk.Button(f, text="Focus", command=self.focus_mode).pack(side="left", padx=2)
+        ttk.Button(f, text="Navigation", command=self.toggle_nav).pack(side="left", padx=2)
 
     # ---------- body ----------
     def _body(self):
         mid = ttk.Frame(self.root); mid.pack(fill="both", expand=True)
-        # التنقل
+        # Navigation pane
         self.nav_frame = ttk.Frame(mid, width=230)
         self.nav_frame.pack(side="left", fill="y"); self.nav_frame.pack_propagate(False)
-        ttk.Label(self.nav_frame, text=" 🧭 التنقل — العناوين ").pack(fill="x", padx=4, pady=2)
+        ttk.Label(self.nav_frame, text=" Navigation — Headings ").pack(fill="x", padx=4, pady=2)
         self.nav = tk.Listbox(self.nav_frame, bg=self.theme["panel2"], fg=self.theme["fg"], relief="flat")
         self.nav.pack(fill="both", expand=True, padx=4, pady=2)
         self.nav.bind("<Double-Button-1>", self.nav_goto)
-        ttk.Button(self.nav_frame, text="تحديث", command=self.refresh_nav).pack(fill="x", padx=4, pady=2)
-        # المحرر
+        ttk.Button(self.nav_frame, text="Refresh", command=self.refresh_nav).pack(fill="x", padx=4, pady=2)
+        # Editor
         doc_wrap = tk.Frame(mid, bg=self.theme["doc"])
         doc_wrap.pack(side="left", fill="both", expand=True)
         self.canvas_bg = doc_wrap
@@ -233,17 +255,16 @@ class WordSoftApp:
         self.text.tag_configure("underline", underline=True)
         self.text.tag_configure("strike", overstrike=True)
         self.text.tag_configure("Title", font=("Arial", int(26 * z), "bold"), justify="center", spacing1=10, spacing3=10)
-        self.text.tag_configure("Heading 1", font=("Arial", int(18 * z), "bold"), spacing1=12, spacing3=6, foreground="#2b579a")
+        self.text.tag_configure("Heading 1", font=("Arial", int(18 * z), "bold"), spacing1=12, spacing3=6, foreground="#2563EB")
         self.text.tag_configure("Heading 2", font=("Arial", int(15 * z), "bold"), spacing1=10, spacing3=4)
         self.text.tag_configure("Heading 3", font=("Arial", int(13 * z), "bold"), spacing1=8, spacing3=4)
-        self.text.tag_configure("Quote", font=("Arial", int(12 * z), "italic"), lmargin1=30, lmargin2=30, background="#f0f4f8" if not self.dark_mode else "#333340")
+        self.text.tag_configure("Quote", font=("Arial", int(12 * z), "italic"), lmargin1=30, lmargin2=30, background="#eef3ff" if not self.dark_mode else "#2c3550")
         self.text.tag_configure("List Bullet", lmargin1=36, lmargin2=36)
         self.text.tag_configure("List Number", lmargin1=36, lmargin2=36)
         for al in ("left", "center", "right", "justify"):
             self.text.tag_configure(f"al-{al}", justify=al)
-        # أحجام وألوان ديناميكية تنشأ عند الحاجة
 
-    # ---------- تحميل / حفظ ----------
+    # ---------- load / save ----------
     def load_doc(self, doc: WordDoc):
         self.doc = doc
         self.text.delete("1.0", "end")
@@ -251,7 +272,7 @@ class WordSoftApp:
         for b in doc.blocks:
             if isinstance(b, Table):
                 line = self.text.index("end-1c").split(".")[0]
-                self.text.insert("end", f"▦ جدول ({len(b.rows)}×{len(b.rows[0]) if b.rows else 0}): {b.rows[0][0] if b.rows and b.rows[0] else ''} …\n", ("table-ph",))
+                self.text.insert("end", f"Table ({len(b.rows)}x{len(b.rows[0]) if b.rows else 0}): {b.rows[0][0] if b.rows and b.rows[0] else ''} ...\n", ("table-ph",))
                 self.tables[line] = b
             else:
                 tags = []
@@ -263,7 +284,7 @@ class WordSoftApp:
                 start = self.text.index("end-1c")
                 self.text.insert("end", pre + (b.text() or "") + "\n")
                 end = self.text.index("end-1c")
-                # تنسيق الـ Runs
+                # Apply run formatting
                 pos = len(pre)
                 for r in b.runs:
                     n = len(r.text)
@@ -291,12 +312,12 @@ class WordSoftApp:
                     self.text.tag_add(tuple(tags) if len(tags) > 1 else tags[0], start, end)
         self.text.edit_reset()
         self.text.edit_modified(False)
-        self.root.title(f"WordSoft — {doc.title}")
+        self.root.title(f"{BRAND['name']} — {doc.title}")
         self.refresh_nav(); self.update_status()
 
     def text_to_doc(self) -> WordDoc:
         content = self.text.get("1.0", "end-1c").split("\n")
-        doc = WordDoc(title=self.doc.title, author=self.doc.author, track_changes=self.track.get())
+        doc = WordDoc(title=self.doc.title, author="salim-slimani", track_changes=self.track.get())
         for i, line in enumerate(content, start=1):
             if str(i) in self.tables:
                 doc.blocks.append(self.tables[str(i)])
@@ -304,7 +325,7 @@ class WordSoftApp:
             if not line.strip():
                 doc.blocks.append(Paragraph([Run("")]))
                 continue
-            # كشف النمط والمحاذاة
+            # Detect style and alignment
             tags = set(self.text.tag_names(f"{i}.0"))
             style = "Normal"
             for s in STYLES:
@@ -312,11 +333,11 @@ class WordSoftApp:
             align = "left"
             for a in ("left", "center", "right", "justify"):
                 if f"al-{a}" in tags: align = a; break
-            # كشف البادئة
+            # Strip list prefixes
             t = line
             if style in ("List Bullet",) and t.startswith("• "): t = t[2:]
             if style in ("List Number",) and re.match(r"^\d+\.\s", t): t = re.sub(r"^\d+\.\s", "", t)
-            # بناء Runs حسب تغير التنسيق
+            # Build runs from formatting changes
             runs: list[Run] = []
             buf = ""; cur = None
             for j, ch in enumerate(t):
@@ -340,12 +361,12 @@ class WordSoftApp:
             doc.blocks.append(Paragraph(runs, style=style, align=align))
         return doc
 
-    # ---------- ملف ----------
+    # ---------- file ----------
     def file_new(self):
-        win = tk.Toplevel(self.root); win.title("مستند جديد — قوالب WordSoft"); win.geometry("520x340")
-        ttk.Label(win, text="اختر قالباً:", font=("Segoe UI", 12, "bold")).pack(pady=8)
-        for label, kind in [("📄 فارغ", "blank"), ("📖 دليل الاستوديو (عينة)", "sample"),
-                            ("✉ رسالة رسمية", "letter"), ("📊 تقرير", "report"), ("👤 سيرة ذاتية", "resume")]:
+        win = tk.Toplevel(self.root); win.title(f"New document — {BRAND['name']} templates"); win.geometry("520x340")
+        ttk.Label(win, text="Choose a template:", font=("Segoe UI", 12, "bold")).pack(pady=8)
+        for label, kind in [("Blank", "blank"), ("Open Studio Handbook (sample)", "sample"),
+                            ("Formal letter", "letter"), ("Report", "report"), ("Resume", "resume")]:
             ttk.Button(win, text=label, width=40,
                        command=lambda k=kind: (self.load_doc(WordDoc.template(k)), self.__setattr__("current_path", None), win.destroy())
                        ).pack(pady=3)
@@ -359,16 +380,16 @@ class WordSoftApp:
             doc = formats.load(p)
             self.current_path = p if p.endswith(".docx") else None
             self.load_doc(doc)
-            messagebox.showinfo("WordSoft", f"تم الفتح:\n{p}")
+            messagebox.showinfo(BRAND["name"], f"Opened:\n{p}")
         except Exception as ex:
-            messagebox.showerror("خطأ", str(ex))
+            messagebox.showerror("Error", str(ex))
 
     def file_save(self):
         if not self.current_path: return self.file_saveas()
         try:
             formats.save_docx(self.text_to_doc(), self.current_path)
-            messagebox.showinfo("WordSoft", "تم الحفظ ✓")
-        except Exception as ex: messagebox.showerror("خطأ", str(ex))
+            messagebox.showinfo(BRAND["name"], "Saved ✓")
+        except Exception as ex: messagebox.showerror("Error", str(ex))
 
     def file_saveas(self):
         p = filedialog.asksaveasfilename(defaultextension=".docx", filetypes=SAVE_DOCX)
@@ -376,16 +397,16 @@ class WordSoftApp:
         try:
             formats.save_docx(self.text_to_doc(), p)
             self.current_path = p
-            messagebox.showinfo("WordSoft", f"تم الحفظ:\n{p}")
-        except Exception as ex: messagebox.showerror("خطأ", str(ex))
+            messagebox.showinfo(BRAND["name"], f"Saved:\n{p}")
+        except Exception as ex: messagebox.showerror("Error", str(ex))
 
     def _export(self, ext, ftype, saver):
         p = filedialog.asksaveasfilename(defaultextension=ext, filetypes=[ftype])
         if not p: return
         try:
             saver(self.text_to_doc(), p)
-            messagebox.showinfo("WordSoft", f"تم التصدير:\n{p}")
-        except Exception as ex: messagebox.showerror("خطأ", str(ex))
+            messagebox.showinfo(BRAND["name"], f"Exported:\n{p}")
+        except Exception as ex: messagebox.showerror("Error", str(ex))
 
     def export_pdf(self): self._export(".pdf", ("PDF", "*.pdf"), formats.save_pdf)
     def export_html(self): self._export(".html", ("HTML", "*.html"), formats.save_html)
@@ -394,11 +415,11 @@ class WordSoftApp:
 
     def doc_props(self):
         d = self.text_to_doc().stats()
-        messagebox.showinfo("خصائص المستند",
-            f"العنوان: {self.doc.title}\nالكلمات: {d['words']}\nالأحرف: {d['chars']}\n"
-            f"الفقرات: {d['paragraphs']}\nالجداول: {d['tables']}\nالصفحات ≈ {d['pages']}")
+        messagebox.showinfo("Document properties",
+            f"Title: {self.doc.title}\nWords: {d['words']}\nCharacters: {d['chars']}\n"
+            f"Paragraphs: {d['paragraphs']}\nTables: {d['tables']}\nPages ≈ {d['pages']}")
 
-    # ---------- تنسيق ----------
+    # ---------- formatting ----------
     def _sel(self):
         try: return (self.text.index("sel.first"), self.text.index("sel.last"))
         except Exception:
@@ -407,16 +428,11 @@ class WordSoftApp:
 
     def toggle_tag(self, tag):
         a, b = self._sel()
-        if tag in self.text.tag_names("insert"):  # مؤشر داخل تنسيق
-            pass
-        # بدّل: إن كان الكل موسوماً أزل وإلا أضف
         try:
             has = all(tag in self.text.tag_names(f"{a}+{i}c") for i in range(min(5, int(self.text.count(a, b, 'chars')[0] or 1))))
         except Exception: has = False
         if has: self.text.tag_remove(tag, a, b)
         else: self.text.tag_add(tag, a, b)
-        if self.track.get() and tag == "bold":
-            pass
         self.update_status()
 
     def apply_font(self):
@@ -432,7 +448,7 @@ class WordSoftApp:
         except Exception: pass
 
     def pick_fg(self):
-        c, hx = colorchooser.askcolor(title="لون النص")
+        c, hx = colorchooser.askcolor(title="Text color")
         if c:
             a, b = self._sel()
             tg = f"fg-{hx.strip('#').upper()}"
@@ -440,7 +456,7 @@ class WordSoftApp:
             self.text.tag_add(tg, a, b)
 
     def pick_hl(self):
-        c, hx = colorchooser.askcolor(title="لون التمييز")
+        c, hx = colorchooser.askcolor(title="Highlight color")
         if c:
             a, b = self._sel()
             tg = f"hl-{hx.strip('#').upper()}"
@@ -459,7 +475,6 @@ class WordSoftApp:
         for s in STYLES: self.text.tag_remove(s, a, b)
         line_a = int(self.text.index(a).split(".")[0]); line_b = int(self.text.index(b).split(".")[0])
         for ln in range(line_a, line_b + 1):
-            # نظّف البادئة القديمة
             txt = self.text.get(f"{ln}.0", f"{ln}.end")
             txt2 = re.sub(r"^[•\d\.\s]+", "", txt) if style in ("Normal", "Title") else txt
             if style == "List Bullet" and not txt.startswith("• "): txt2 = "• " + re.sub(r"^[•\d\.\s]+", "", txt)
@@ -479,8 +494,8 @@ class WordSoftApp:
         try:
             tags = [t for t in self.text.tag_names("sel.first") if t != "sel"]
             self._painter = tags
-            messagebox.showinfo("نسخ التنسيق", "تم نسخ التنسيق — حدّد نصاً ثم اضغط Ctrl+Shift+V للصق.")
-        except Exception: messagebox.showinfo("نسخ التنسيق", "حدّد نصاً أولاً.")
+            messagebox.showinfo("Format painter", "Format copied — select text, then press Ctrl+Shift+V to apply.")
+        except Exception: messagebox.showinfo("Format painter", "Select some text first.")
 
     def paste_format(self):
         if not hasattr(self, "_painter"): return
@@ -498,33 +513,31 @@ class WordSoftApp:
                 if self.text.get(f"{ln}.0", f"{ln}.4") == "    ": self.text.delete(f"{ln}.0", f"{ln}.4")
 
     def set_linespacing(self):
-        messagebox.showinfo("تباعد الأسطر", f"تم الضبط على {self.ls_var.get()} (يطبق عند تصدير DOCX/PDF).")
+        messagebox.showinfo("Line spacing", f"Set to {self.ls_var.get()} (applies on DOCX/PDF export).")
 
     def two_columns(self):
-        messagebox.showinfo("عمودان", "الوضع التجريبي: يُصدَّر كجدول عمودين في DOCX. اكتب « || » للفصل بين العمودين.")
+        messagebox.showinfo("Two columns", "Experimental: write ' || ' to split the columns.")
 
     def page_color(self):
-        c, hx = colorchooser.askcolor(title="لون الصفحة")
+        c, hx = colorchooser.askcolor(title="Page color")
         if hx: self.text.configure(bg=hx)
 
     def render_page_bg(self):
         self.canvas_bg.configure(bg=self.theme["doc"])
 
-    # ---------- إدراج ----------
+    # ---------- insert ----------
     def insert_text(self, t):
         self.text.insert("insert", t); self.update_status()
 
     def insert_table_dlg(self):
-        r = simpledialog.askinteger("جدول", "عدد الصفوف:", initialvalue=3, minvalue=1, maxvalue=20)
-        c = simpledialog.askinteger("جدول", "عدد الأعمدة:", initialvalue=3, minvalue=1, maxvalue=10)
+        r = simpledialog.askinteger("Table", "Rows:", initialvalue=3, minvalue=1, maxvalue=20)
+        c = simpledialog.askinteger("Table", "Columns:", initialvalue=3, minvalue=1, maxvalue=10)
         if not r or not c: return
-        rows = [["" for _ in range(c)] for _ in range(r)]
-        # املأ عناوين تجريبية
-        for j in range(c): rows[0][j] = f"عمود {j + 1}"
+        rows = [[f"Column {j + 1}" if i == 0 else "" for j in range(c)] for i in range(r)]
         line = self.text.index("insert").split(".")[0]
-        self.text.insert("insert", f"\n▦ جدول ({r}×{c})\n")
+        self.text.insert("insert", f"\nTable ({r}x{c})\n")
         self.tables[line] = Table(rows=rows)
-        messagebox.showinfo("جدول", "تم إدراج الجدول — سيُحفظ في DOCX/PDF/HTML. حرّره من «مراجعة الجداول» عبر إعادة الفتح.")
+        messagebox.showinfo("Table", "Table inserted — saved into DOCX/PDF/HTML on export.")
 
     def insert_image(self):
         from PIL import Image, ImageTk
@@ -535,30 +548,30 @@ class WordSoftApp:
             ph = ImageTk.PhotoImage(img)
             self._images.append(ph)
             self.text.image_create("insert", image=ph)
-            self.text.insert("insert", f" [صورة: {os.path.basename(p)}]\n")
-        except Exception as ex: messagebox.showerror("خطأ", str(ex))
+            self.text.insert("insert", f" [Image: {os.path.basename(p)}]\n")
+        except Exception as ex: messagebox.showerror("Error", str(ex))
 
     def insert_pagenum(self):
         n = len(self.text.get("1.0", "end-1c").split("\n")) // 45 + 1
-        self.insert_text(f" [صفحة {n}] ")
+        self.insert_text(f" [Page {n}] ")
 
     def insert_link(self):
-        url = simpledialog.askstring("رابط", "الصق الرابط:")
+        url = simpledialog.askstring("Link", "Paste the URL:")
         if url: self.insert_text(f" {url} ")
 
     def insert_symbol(self):
         syms = "Ω π Σ √ ∞ § © ® ™ € £ ¥ → ← • … — – α β γ"
-        s = simpledialog.askstring("رمز", f"اختر رمزاً والصقه:\n{syms}")
+        s = simpledialog.askstring("Symbol", f"Pick a symbol and paste it:\n{syms}")
         if s: self.insert_text(s)
 
     def add_comment(self):
         try: sel = self.text.get("sel.first", "sel.last")
-        except Exception: sel = "النص"
-        self.insert_text(f" [تعليق: {sel[:30]}…] ")
+        except Exception: sel = "text"
+        self.insert_text(f" [Comment: {sel[:30]}...] ")
 
-    # ---------- بحث ----------
+    # ---------- find ----------
     def find_dialog(self):
-        w = simpledialog.askstring("بحث", "كلمة البحث:")
+        w = simpledialog.askstring("Find", "Search for:")
         if not w: return
         self.text.tag_remove("found", "1.0", "end")
         self.text.tag_configure("found", background="yellow", foreground="black")
@@ -567,14 +580,14 @@ class WordSoftApp:
             idx = self.text.search(w, idx, nocase=True, stopindex="end")
             if not idx: break
             self.text.tag_add("found", idx, f"{idx}+{len(w)}c"); idx = f"{idx}+{len(w)}c"; n += 1
-        messagebox.showinfo("بحث", f"وجد {n} نتيجة.")
+        messagebox.showinfo("Find", f"Found {n} match(es).")
 
     def replace_dialog(self):
-        win = tk.Toplevel(self.root); win.title("استبدال"); win.geometry("340x170")
-        ttk.Label(win, text="بحث عن:").pack(); e1 = ttk.Entry(win, width=36); e1.pack(pady=2)
-        ttk.Label(win, text="استبدال بـ:").pack(); e2 = ttk.Entry(win, width=36); e2.pack(pady=2)
+        win = tk.Toplevel(self.root); win.title("Replace"); win.geometry("340x170")
+        ttk.Label(win, text="Find:").pack(); e1 = ttk.Entry(win, width=36); e1.pack(pady=2)
+        ttk.Label(win, text="Replace with:").pack(); e2 = ttk.Entry(win, width=36); e2.pack(pady=2)
         def go():
-            a, b, n = "1.0", None, 0
+            a, n = "1.0", 0
             w, r = e1.get(), e2.get()
             if not w: return
             while True:
@@ -582,35 +595,34 @@ class WordSoftApp:
                 if not idx: break
                 self.text.delete(idx, f"{idx}+{len(w)}c"); self.text.insert(idx, r)
                 a, n = f"{idx}+{len(r)}c", n + 1
-            messagebox.showinfo("استبدال", f"تم استبدال {n}."); win.destroy()
-        ttk.Button(win, text="استبدال الكل", command=go).pack(pady=8)
+            messagebox.showinfo("Replace", f"Replaced {n}."); win.destroy()
+        ttk.Button(win, text="Replace all", command=go).pack(pady=8)
 
-    # ---------- مراجعة ----------
+    # ---------- review ----------
     def wordcount_dialog(self):
         d = self.text_to_doc().stats()
-        messagebox.showinfo("تعداد الكلمات",
-            f"الكلمات: {d['words']}\nالأحرف: {d['chars']}\nالفقرات: {d['paragraphs']}\nالصفحات ≈ {d['pages']}")
+        messagebox.showinfo("Word count",
+            f"Words: {d['words']}\nCharacters: {d['chars']}\nParagraphs: {d['paragraphs']}\nPages ≈ {d['pages']}")
 
     def spell_check(self):
         txt = self.text.get("1.0", "end-1c")
-        words = re.findall(r"[\u0600-\u06FF\w]+", txt)
-        # تدقيق بسيط: كلمات مكررة + حروف متكررة + همزات شائعة
+        words = re.findall(r"[A-Za-z\u0600-\u06FF]+", txt)
+        # Lightweight check: repeated words + over-repeated letters.
         issues = []
         prev = None
         for w in words:
-            if w == prev: issues.append(f"تكرار: {w}")
-            if re.search(r"(.)\1{3,}", w): issues.append(f"حروف مكررة: {w}")
+            if prev and w.lower() == prev.lower(): issues.append(f"Repeated word: {w}")
+            if re.search(r"(.)\1{3,}", w): issues.append(f"Repeated letters: {w}")
             prev = w
         self.text.tag_remove("spell", "1.0", "end")
         self.text.tag_configure("spell", underline=True)
-        msg = "لا مشاكل واضحة ✓" if not issues else "\n".join(issues[:15]) + (f"\n… +{len(issues) - 15}" if len(issues) > 15 else "")
-        messagebox.showinfo("تدقيق إملائي F7", msg)
+        msg = "No obvious issues ✓" if not issues else "\n".join(issues[:15]) + (f"\n... +{len(issues) - 15} more" if len(issues) > 15 else "")
+        messagebox.showinfo("Spelling (F7)", msg)
 
-    # ---------- عرض ----------
+    # ---------- view ----------
     def set_zoom(self, z):
         self.zoom = max(0.5, min(3.0, z))
         self._config_tags()
-        # أعد تطبيق أحجام مخصصة
         for tg in self.text.tag_names():
             if tg.startswith("sz-"):
                 try: self.text.tag_configure(tg, font=("Arial", int(int(tg[3:]) * self.zoom)))
@@ -628,14 +640,14 @@ class WordSoftApp:
         self._nav_pos = []
         idx = "1.0"
         while True:
-            # ابحث عن أسطر موسومة بعناوين
             nl = self.text.search("\n", idx, stopindex="end")
             if not nl: break
             for h in ("Title", "Heading 1", "Heading 2", "Heading 3"):
                 if h in self.text.tag_names(idx):
                     t = self.text.get(idx, nl).strip()[:60]
                     if t:
-                        self.nav.insert("end", f"{'#' if h == 'Title' else '#' * int(h[-1])} {t}")
+                        prefix = "#" if h == "Title" else "#" * int(h[-1])
+                        self.nav.insert("end", f"{prefix} {t}")
                         self._nav_pos.append(idx)
                     break
             idx = f"{nl}+1c"
@@ -647,7 +659,7 @@ class WordSoftApp:
             self.text.see(self._nav_pos[i]); self.text.mark_set("insert", self._nav_pos[i])
         except Exception: pass
 
-    # ---------- أحداث ----------
+    # ---------- events ----------
     def _bind_keys(self):
         r = self.root
         r.bind("<Control-s>", lambda e: (self.file_save(), "break")[1])
@@ -667,13 +679,8 @@ class WordSoftApp:
             self.refresh_nav(); self.update_status()
 
     def on_keyrelease(self, e=None):
-        # تصحيح تلقائي + علامات ذكية (مثل Word)
+        # Smart autocorrect (like Word)
         if self.smart.get() and e and e.char in (" ", "\r", "."):
-            try:
-                idx = self.text.index("insert-1word")
-                w = self.text.get(idx, "insert-1c").strip() if False else None
-            except Exception: pass
-            # تبسيط: استبدال آخر 3 أحرف إن طابقت القاموس
             try:
                 end = self.text.index("insert-1c")
                 for k, v in AUTOCORRECT.items():
@@ -682,13 +689,13 @@ class WordSoftApp:
                         self.text.delete(s, end); self.text.insert(s, v)
                         break
             except Exception: pass
-        # استمرار القوائم عند Enter (مثل Word)
+        # Continue lists on Enter (like Word)
         if e and e.keysym == "Return":
             try:
                 prev = int(self.text.index("insert").split(".")[0]) - 1
                 t = self.text.get(f"{prev}.0", f"{prev}.end")
                 if t.startswith("• "):
-                    if t.strip() == "•":  # سطر فارغ ينهي القائمة
+                    if t.strip() == "•":  # empty item ends the list
                         self.text.delete(f"{prev}.0", f"{prev}.end")
                     else:
                         self.text.insert("insert", "• ")
@@ -703,13 +710,15 @@ class WordSoftApp:
         txt = self.text.get("1.0", "end-1c")
         words = len(re.findall(r"\S+", txt))
         pages = max(1, round(words / 400 + 0.5))
-        self.status.config(text=f" الكلمات: {words} | الصفحات ≈ {pages} | زوم: {int(self.zoom * 100)}% "
-                                f"| {'تعقب: يعمل' if self.track.get() else 'تعقب: متوقف'} | {'🌙' if self.dark_mode else '☀'} WordSoft")
+        track = "tracking" if self.track.get() else "not tracking"
+        self.status.config(text=f" Words: {words} | Pages ≈ {pages} | Zoom: {int(self.zoom * 100)}% "
+                                f"| Track changes: {track} | {BRAND['name']} {BRAND['version']}")
 
     def about(self):
-        messagebox.showinfo("WordSoft",
-            "WordSoft 1.0\nمعالج نصوص عربي حر — مستوحى من WordCraft.\n"
-            "الشريط، الأنماط، الجداول، التعداد، التدقيق، والتصدير DOCX/PDF/HTML/MD.\nمكتوب بلغة Python ليعمل فوراً.")
+        messagebox.showinfo(f"About {BRAND['name']}",
+            f"{BRAND['name']} {BRAND['version']}\n{BRAND['tagline']}\n\n"
+            "Ribbon tabs, styles, tables, word count, spelling, and DOCX/PDF/HTML/MD export.\n"
+            "Written in Python so it runs instantly.\n\nCopyright (c) 2026 salim-slimani. MIT License.")
 
 
 def main(path=None):
