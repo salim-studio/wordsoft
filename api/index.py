@@ -9,11 +9,13 @@ Copyright (c) 2026 salim-slimani. MIT License.
 """
 import os, sys, re, io, base64, html as H
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from flask import Flask, request, send_file, jsonify, render_template_string
+from flask import Flask, request, send_file, jsonify, render_template_string, make_response
 from engine import WordDoc, Paragraph, Run, Table, PageBreak, TOCField, FootnoteRef, Footnote, Citation
 import formats
 
 app = Flask(__name__)
+
+WEB_VERSION = "2.3"
 
 PAGE = r"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -56,9 +58,10 @@ button:hover{background:var(--blue)}button.warn:hover{background:#b91c1c}
 #st input[type=range]{width:120px}.sp{flex:1}
 /* dialog */#ov{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;z-index:60;align-items:center;justify-content:center}
 #ov.open{display:flex}#dlg{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:18px;min-width:340px;max-width:560px;max-height:80vh;overflow:auto}
+#verpill{background:linear-gradient(135deg,#2563EB,#7C3AED);color:#fff;font-size:11px;font-weight:bold;border-radius:20px;padding:3px 10px}
 #dlg h3{margin-top:0}#dlg textarea{width:100%;background:var(--panel2);color:var(--fg);border:1px solid var(--bd);border-radius:6px}
 </style></head><body>
-<div id="qa"><span class="logo">W</span><b>WordSoft</b><span class="tag">Write beautifully.</span>
+<div id="qa"><span class="logo">W</span><b>WordSoft</b><span id="verpill">v2.3 ● NEW</span><span class="tag">Write beautifully.</span>
 <button onclick="qaNew()" title="New">New</button><button onclick="openDoc()" title="Open">Open</button>
 <button onclick="dl('docx')" title="Save">Save</button><button onclick="document.execCommand('undo')" title="Undo">Undo</button>
 <button onclick="document.execCommand('redo')" title="Redo">Redo</button><button onclick="doPrint()" title="Print">Print</button>
@@ -69,7 +72,7 @@ button:hover{background:var(--blue)}button.warn:hover{background:#b91c1c}
 <div id="stage"><div style="position:relative;width:100%;max-width:820px"><div id="wm"></div><div id="page" contenteditable="true"></div></div></div>
 <div id="cmt"><h4>Comments <button onclick="addComment()">+ New</button></h4><div id="clist" style="overflow:auto;display:flex;flex-direction:column;gap:4px"></div></div>
 </div>
-<div id="st"><span id="sWords">Words: 0</span><span id="sPages">Page 1 of 1</span><span id="sTrack">Track: off</span><span class="sp"></span>
+<div id="st"><span id="sWords">Words: 0</span><span id="sPages">Page 1 of 1</span><span id="sTrack">Track: off</span><span id="sVer">Web v2.3</span><span class="sp"></span>
 <button onclick="setView('print')">Print</button><button onclick="setView('web')">Web</button><button onclick="setView('read')">Read</button>
 <input type="range" min="50" max="200" value="100" oninput="setZoom(this.value)"><span id="sZoom">100%</span></div>
 <div id="bs"><div class="menu" id="bsMenu"></div><div class="body" id="bsBody"></div></div>
@@ -233,10 +236,11 @@ function openBS(item){const bs=$('bs');bs.classList.add('open');const m=$('bsMen
 ['New','Open','Info','Export','Print','Close'].forEach(x=>{const b=document.createElement('button');b.textContent=x;
 b.onclick=()=>bsShow(x);m.appendChild(b)});bsShow(item||'New')}
 function closeBS(){$('bs').classList.remove('open')}
+function whatsNew(){const o=$('ov');o.classList.add('open');$('dlg').innerHTML=`<h3>✨ What's new in WordSoft Web v2.3</h3><ul style="font-size:13.5px;line-height:1.9"><li>Full ribbon: File, Home, Insert, Design, Layout, References, <b>Mailings</b>, Review, View</li><li>File backstage with 8 templates + EPUB export</li><li>Tables with add/remove rows & columns</li><li>Auto table of contents, footnotes, citations + bibliography, captions, index</li><li>CSV mail merge with preview & finish</li><li>Spelling, thesaurus, word count, comments, track changes</li><li>Themes, watermark, page color, columns, navigation pane</li><li>Live DOCX / PDF / EPUB / HTML / MD / TXT export</li></ul><button onclick="document.getElementById('ov').classList.remove('open')">Close</button>`;}
 function bsShow(x){const b=$('bsBody');
 if(x==='New')b.innerHTML='<h2>New document</h2>'+[['Blank','blank'],['Cover page','cover'],['Open Studio Handbook (sample)','sample'],['Formal letter','letter'],['Report','report'],['Resume','resume'],['Envelope','envelope'],['Labels','label']].map(([t,k])=>`<button class="tpl" onclick="newDoc('${k}');closeBS()">${t}</button>`).join('');
 else if(x==='Open')b.innerHTML='<h2>Open</h2><button class="tpl" onclick="$(\'upDocx\').click()">Browse for DOCX...</button>';
-else if(x==='Info'){const t=ed().innerText;b.innerHTML=`<h2>Info</h2><p>Title: ${STATE.title}</p><p>Words: ${words()} — Pages ~ ${pages()}</p><p>Theme: ${STATE.theme} — ${STATE.setup.size} ${STATE.setup.orientation}</p><p>Copyright (c) 2026 salim-slimani — MIT License</p>`}
+else if(x==='Info'){const t=ed().innerText;b.innerHTML=`<h2>Info — WordSoft Web v2.3</h2><p>Title: ${STATE.title}</p><p>Words: ${words()} — Pages ~ ${pages()}</p><p>Theme: ${STATE.theme} — ${STATE.setup.size} ${STATE.setup.orientation}</p><p>Copyright (c) 2026 salim-slimani — MIT License</p><button class="tpl" onclick="whatsNew()">✨ What's new in v2.3</button>`}
 else if(x==='Export')b.innerHTML='<h2>Export</h2>'+['docx','pdf','epub','html','md','txt'].map(f=>`<button class="tpl" onclick="dl('${f}')">Download .${f.toUpperCase()}</button>`).join('');
 else if(x==='Print')b.innerHTML='<h2>Print</h2><button class="tpl" onclick="doPrint()">Print...</button><button class="tpl" onclick="dl(\'pdf\')">Print preview (PDF)...</button>';
 else closeBS()}
@@ -390,7 +394,10 @@ def html_to_doc(h: str, title="Web document", setup=None, hf=None,
 
 @app.route("/")
 def index():
-    return render_template_string(PAGE)
+    resp = make_response(render_template_string(PAGE))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 @app.route("/api/template/<kind>")
